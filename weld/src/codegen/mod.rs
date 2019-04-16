@@ -17,10 +17,12 @@ use crate::error::*;
 use crate::runtime::WeldRuntimeErrno;
 use crate::sir::*;
 use crate::util::stats::CompilationStats;
+use crate::util::offload_ve::offload_ve;
 
 use std::fmt;
 
 mod llvm;
+mod c;
 
 pub use self::llvm::load_library;
 
@@ -89,7 +91,12 @@ pub fn compile_program(
     conf: &mut ParsedConf,
     stats: &mut CompilationStats,
 ) -> WeldResult<CompiledModule> {
-    let runnable = llvm::compile(&program, conf, stats)?;
+    let runnable =
+        if offload_ve() {
+            c::compile(&program, conf, stats)?
+        } else {
+            llvm::compile(&program, conf, stats)?
+        };
     let result = CompiledModule { runnable };
     Ok(result)
 }
