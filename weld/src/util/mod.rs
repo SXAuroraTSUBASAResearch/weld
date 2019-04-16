@@ -15,6 +15,8 @@ use std::iter;
 pub mod colors;
 pub mod dump;
 pub mod stats;
+pub mod env;
+pub mod offload_ve;
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.
 /// Each SymbolGenerator tracks the maximum ID used for every symbol name, and can be used to
