@@ -22,3 +22,12 @@ num-integer = "0.1"
 regex = "0.1.71"
 time = "0.1.38"
 uuid = { version = "0.7.1", features = ["v4"] }
+
+[features]
+# We use offlaod_ve whenever in a branch for VE.
+default = ["offload_ve"]
+
+# Add feature "offload_ve" here, then you can use it like below in .rs
+#   #[cfg(feature = "offload_ve")]
+#   ...
+offload_ve = []
