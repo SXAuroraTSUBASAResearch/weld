@@ -48,6 +48,8 @@
 //!
 //! * The `target` module provides parsed target specific feature information.
 
+extern crate code_builder;
+
 use fnv;
 
 use libc;
@@ -64,6 +66,7 @@ use crate::conf::ParsedConf;
 use crate::error::*;
 use crate::sir::*;
 use crate::util::stats::CompilationStats;
+use code_builder::CodeBuilder;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
@@ -148,6 +151,12 @@ pub fn compile(
     nonfatal!(write_code(
         codegen.to_string(),
         DumpCodeFormat::LLVM,
+        &conf.dump_code
+    ));
+
+    nonfatal!(write_code(
+        codegen.gen_c_code(),
+        DumpCodeFormat::C,
         &conf.dump_code
     ));
 
@@ -325,6 +334,13 @@ pub struct CGenerator {
     struct_names: FnvHashMap<Type, CString>,
     /// Counter for unique struct names.
     struct_index: u32,
+
+    /// A CodeBuilder and ID generator for prelude functions such as type
+    /// and struct definitions.
+    prelude_code: CodeBuilder,
+
+    /// A CodeBuilder for body functions in the module.
+    body_code: CodeBuilder,
 }
 
 /// Defines helper methods for LLVM code generation.
@@ -761,6 +777,8 @@ impl CGenerator {
             struct_names: FnvHashMap::default(),
             struct_index: 0,
             intrinsics,
+            prelude_code: CodeBuilder::new(),
+            body_code: CodeBuilder::new(),
         })
     }
 
@@ -1730,6 +1748,11 @@ impl CGenerator {
     unsafe fn size_of_ty(&mut self, ty: &Type) -> usize {
         let ll_ty = self.llvm_type(ty).unwrap();
         (self.size_of_bits(ll_ty) / 8) as usize
+    }
+
+    fn gen_c_code(&self) -> String {
+        format!("// PRELUDE:\n{}\n\n// BODY:\n{}\n",
+                self.prelude_code.result(), self.body_code.result())
     }
 }
 
