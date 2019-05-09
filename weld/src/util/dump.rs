@@ -30,13 +30,14 @@ pub enum DumpCodeFormat {
     LLVMOpt,
     SIR,
     Assembly,
+    C,
 }
 
 impl DumpCodeFormat {
     /// Returns a vector with all formats.
     pub fn all() -> Vec<DumpCodeFormat> {
         use self::DumpCodeFormat::*;
-        vec![Weld, WeldOpt, LLVM, LLVMOpt, SIR, Assembly]
+        vec![Weld, WeldOpt, LLVM, LLVMOpt, SIR, Assembly, C]
     }
 
     /// Returns a filename suffix for the format.
@@ -57,6 +58,7 @@ impl DumpCodeFormat {
             LLVM | LLVMOpt => "ll",
             SIR => "sir",
             Assembly => "S",
+            C => "c",
         }
         .to_string()
     }
