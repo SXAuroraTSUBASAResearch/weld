@@ -18,7 +18,7 @@ use crate::sir::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
 
-use super::{CodeGenExt, FunctionContext, HasPointer, LlvmGenerator};
+use super::{CodeGenExt, FunctionContext, HasPointer, CGenerator};
 
 lazy_static! {
     /// The serialized type, which is a vec[i8].
@@ -50,7 +50,7 @@ pub trait SerDeGen {
     ) -> WeldResult<()>;
 }
 
-impl SerDeGen for LlvmGenerator {
+impl SerDeGen for CGenerator {
     unsafe fn gen_serialize(
         &mut self,
         ctx: &mut FunctionContext<'_>,
@@ -172,7 +172,7 @@ trait SerHelper {
     unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
 }
 
-impl SerHelper for LlvmGenerator {
+impl SerHelper for CGenerator {
     unsafe fn gen_put_value(
         &mut self,
         builder: LLVMBuilderRef,
@@ -519,7 +519,7 @@ trait DeHelper {
     ) -> WeldResult<LLVMValueRef>;
 }
 
-impl DeHelper for LlvmGenerator {
+impl DeHelper for CGenerator {
     /// Read a value into a register from the serialization buffer.
     unsafe fn gen_get_value(
         &mut self,

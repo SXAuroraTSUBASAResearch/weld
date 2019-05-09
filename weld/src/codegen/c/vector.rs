@@ -23,7 +23,7 @@ use self::llvm_sys::prelude::*;
 
 use super::intrinsic::Intrinsics;
 use super::CodeGenExt;
-use super::LlvmGenerator;
+use super::CGenerator;
 use super::LLVM_VECTOR_WIDTH;
 
 /// Index of the pointer into the vector data structure.
@@ -80,7 +80,7 @@ pub trait VectorExt {
     ) -> WeldResult<LLVMValueRef>;
 }
 
-impl VectorExt for LlvmGenerator {
+impl VectorExt for CGenerator {
     unsafe fn gen_new(
         &mut self,
         builder: LLVMBuilderRef,

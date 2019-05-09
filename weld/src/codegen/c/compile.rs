@@ -1,5 +1,5 @@
 //!
-//! This module manages compiling with optimization the generated CC module
+//! This module manages compiling with optimization the generated C module
 //! to the machine code.
 
 use libc;

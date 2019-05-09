@@ -1,15 +1,15 @@
-//! An CC backend currently optimized for single-threaded execution.
+//! An C backend currently optimized for single-threaded execution.
 //!
-//! The `LlvmGenerator` struct is responsible for converting an SIR program into an LLVM module.
+//! The `CGenerator` struct is responsible for converting an SIR program into an LLVM module.
 //! The LLVM module is then JIT'd and returned as a runnable executable.
 //!
 //! # Overview
 //!
 //! This code generator is divided into a number of submodules, most of which implement extension
-//! traits on top of `LlvmGenerator`. For example, the `hash` module implements the `GenHash`
-//! trait, whose sole implemenator is `LlvmGenerator`. The `gen_hash` function in the `GenHash`
-//! trait thus adds using state maintained in the `LlvmGenerator` to hash Weld types.
-//! `LlvmGenerator` tracks code that has been generated already: for most extension traits, this
+//! traits on top of `CGenerator`. For example, the `hash` module implements the `GenHash`
+//! trait, whose sole implemenator is `CGenerator`. The `gen_hash` function in the `GenHash`
+//! trait thus adds using state maintained in the `CGenerator` to hash Weld types.
+//! `CGenerator` tracks code that has been generated already: for most extension traits, this
 //! usually involves some state to ensure that the same code is not generated twice.
 //!
 //! # The `CodeGenExt` trait
@@ -123,7 +123,7 @@ pub fn load_library(libname: &str) -> WeldResult<()> {
 /// Returns the size of a type in bytes.
 pub fn size_of(ty: &Type) -> usize {
     unsafe {
-        let mut gen = LlvmGenerator::new(ParsedConf::default()).unwrap();
+        let mut gen = CGenerator::new(ParsedConf::default()).unwrap();
         gen.size_of_ty(ty)
     }
 }
@@ -141,8 +141,9 @@ pub fn compile(
     use crate::util::dump::{write_code, DumpCodeFormat};
 
     info!("Compiling using single thread runtime");
+    info!("Target architecture is VE");
 
-    let codegen = unsafe { LlvmGenerator::generate(conf.clone(), &program)? };
+    let codegen = unsafe { CGenerator::generate(conf.clone(), &program)? };
 
     nonfatal!(write_code(
         codegen.to_string(),
@@ -273,7 +274,7 @@ impl HasPointer for Type {
 }
 
 /// A struct holding the global codegen state for an SIR program.
-pub struct LlvmGenerator {
+pub struct CGenerator {
     /// A configuration for generating code.
     conf: ParsedConf,
     /// Target-specific information used during code generation.
@@ -709,7 +710,7 @@ pub trait CodeGenExt {
     }
 }
 
-impl CodeGenExt for LlvmGenerator {
+impl CodeGenExt for CGenerator {
     fn module(&self) -> LLVMModuleRef {
         self.module
     }
@@ -719,9 +720,9 @@ impl CodeGenExt for LlvmGenerator {
     }
 }
 
-impl LlvmGenerator {
-    /// Initialize a new LlvmGenerator.
-    unsafe fn new(conf: ParsedConf) -> WeldResult<LlvmGenerator> {
+impl CGenerator {
+    /// Initialize a new CGenerator.
+    unsafe fn new(conf: ParsedConf) -> WeldResult<CGenerator> {
         let context = LLVMContextCreate();
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
 
@@ -738,9 +739,9 @@ impl LlvmGenerator {
             llvm_exts::HOST_CPU_FEATURES.to_str().unwrap(),
         )?;
 
-        debug!("LlvmGenerator features: {}", target.features);
+        debug!("CGenerator features: {}", target.features);
 
-        Ok(LlvmGenerator {
+        Ok(CGenerator {
             conf,
             context,
             module,
@@ -764,8 +765,8 @@ impl LlvmGenerator {
     }
 
     /// Generate code for an SIR program.
-    unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<LlvmGenerator> {
-        let mut gen = LlvmGenerator::new(conf)?;
+    unsafe fn generate(conf: ParsedConf, program: &SirProgram) -> WeldResult<CGenerator> {
+        let mut gen = CGenerator::new(conf)?;
 
         // Declare each function first to create a reference to it. Loop body functions are only
         // called by their ParallelForData terminators, so those are generated on-the-fly during
@@ -1732,7 +1733,7 @@ impl LlvmGenerator {
     }
 }
 
-impl fmt::Display for LlvmGenerator {
+impl fmt::Display for CGenerator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = unsafe {
             let c_str = LLVMPrintModuleToString(self.module) as *mut c_char;

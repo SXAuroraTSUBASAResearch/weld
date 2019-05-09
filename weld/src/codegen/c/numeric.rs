@@ -21,7 +21,7 @@ use self::llvm_sys::LLVMIntPredicate::*;
 
 use crate::codegen::c::intrinsic::Intrinsics;
 
-use super::{CodeGenExt, FunctionContext, LlvmGenerator, LLVM_VECTOR_WIDTH};
+use super::{CodeGenExt, FunctionContext, CGenerator, LLVM_VECTOR_WIDTH};
 
 /// Generates numeric expresisons.
 pub trait NumericExpressionGen {
@@ -82,7 +82,7 @@ trait NumericExpressionGenInternal {
     ) -> WeldResult<LLVMValueRef>;
 }
 
-impl NumericExpressionGenInternal for LlvmGenerator {
+impl NumericExpressionGenInternal for CGenerator {
     unsafe fn gen_pow(
         &mut self,
         ctx: &mut FunctionContext<'_>,
@@ -148,7 +148,7 @@ impl UnaryOpSupport for UnaryOpKind {
     }
 }
 
-impl NumericExpressionGen for LlvmGenerator {
+impl NumericExpressionGen for CGenerator {
     unsafe fn gen_unaryop(
         &mut self,
         ctx: &mut FunctionContext<'_>,

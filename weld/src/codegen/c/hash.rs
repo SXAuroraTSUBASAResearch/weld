@@ -27,7 +27,7 @@ use super::target::*;
 
 use super::CodeGenExt;
 use super::HasPointer;
-use super::LlvmGenerator;
+use super::CGenerator;
 
 pub const CRC32_SEED: u32 = 0xffff_ffff;
 
@@ -50,7 +50,7 @@ pub trait GenHash {
     ) -> WeldResult<LLVMValueRef>;
 }
 
-impl GenHash for LlvmGenerator {
+impl GenHash for CGenerator {
     unsafe fn gen_hash(
         &mut self,
         ty: &Type,
@@ -218,7 +218,7 @@ trait Hash {
     ) -> WeldResult<(LLVMValueRef, LLVMValueRef)>;
 }
 
-impl Hash for LlvmGenerator {
+impl Hash for CGenerator {
     /// Hash a scalar.
     unsafe fn hash_scalar(
         &mut self,

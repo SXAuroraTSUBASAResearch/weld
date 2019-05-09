@@ -18,7 +18,7 @@ use self::llvm_sys::LLVMIntPredicate::*;
 use self::llvm_sys::LLVMLinkage;
 
 use super::CodeGenExt;
-use super::LlvmGenerator;
+use super::CGenerator;
 
 use crate::ast::BinOpKind::Equal;
 use crate::codegen::c::numeric::gen_binop;
@@ -58,7 +58,7 @@ pub trait GenEq {
     unsafe fn gen_opaque_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef>;
 }
 
-impl GenEq for LlvmGenerator {
+impl GenEq for CGenerator {
     /// Generates an equality function for a type.
     unsafe fn gen_eq_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
         use crate::ast::Type::*;

@@ -26,7 +26,7 @@ use crate::codegen::c::llvm_exts::*;
 use crate::codegen::c::vector::VectorExt;
 use crate::codegen::c::{LLVM_VECTOR_WIDTH, SIR_FUNC_CALL_CONV};
 
-use super::{CodeGenExt, FunctionContext, LlvmGenerator};
+use super::{CodeGenExt, FunctionContext, CGenerator};
 
 /// An internal trait for generating parallel For loops.
 pub trait ForLoopGenInternal {
@@ -91,7 +91,7 @@ pub trait ForLoopGenInternal {
     ) -> WeldResult<()>;
 }
 
-impl ForLoopGenInternal for LlvmGenerator {
+impl ForLoopGenInternal for CGenerator {
     /// Entry point to generating a for loop.
     unsafe fn gen_for_internal(
         &mut self,

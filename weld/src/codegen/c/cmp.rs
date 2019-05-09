@@ -24,7 +24,7 @@ use self::llvm_sys::LLVMIntPredicate::*;
 use self::llvm_sys::LLVMLinkage;
 
 use super::CodeGenExt;
-use super::LlvmGenerator;
+use super::CGenerator;
 
 /// Returns whether a value can be compared with libc's `memcmp`.
 trait SupportsMemCmp {
@@ -78,7 +78,7 @@ pub trait GenCmp {
     ) -> WeldResult<LLVMValueRef>;
 }
 
-impl GenCmp for LlvmGenerator {
+impl GenCmp for CGenerator {
     /// Generates a default comparison function for a type.
     ///
     /// For scalars, the comparison function returns -1 if left < right, 1 if left > right,

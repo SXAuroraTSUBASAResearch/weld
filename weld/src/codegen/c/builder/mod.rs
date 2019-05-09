@@ -25,7 +25,7 @@ use self::llvm_sys::prelude::*;
 
 use super::dict;
 
-use super::{CodeGenExt, FunctionContext, LlvmGenerator};
+use super::{CodeGenExt, FunctionContext, CGenerator};
 
 use super::hash;
 use super::numeric;
@@ -165,7 +165,7 @@ impl<'a> ResStatement<'a> {
     }
 }
 
-impl BuilderExpressionGen for LlvmGenerator {
+impl BuilderExpressionGen for CGenerator {
     /// Merges two pointer values using the provided binary operator.
     ///
     /// Specifically, performs `*builder_value = *builder_value <binop> *merge_value`
