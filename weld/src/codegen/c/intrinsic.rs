@@ -30,6 +30,8 @@ use self::llvm_sys::prelude::*;
 use crate::runtime::ffi;
 use libc::c_void;
 
+use crate::codegen::c::CContextRef;
+
 /// A single intrinsic.
 #[derive(Debug, Clone)]
 pub enum Intrinsic {
@@ -56,6 +58,7 @@ pub type Mapping = (CString, *mut c_void);
 pub struct Intrinsics {
     context: LLVMContextRef,
     module: LLVMModuleRef,
+    ccontext: CContextRef,
     intrinsics: FnvHashMap<String, Intrinsic>,
 }
 
@@ -66,6 +69,10 @@ impl CodeGenExt for Intrinsics {
 
     fn module(&self) -> LLVMModuleRef {
         self.module
+    }
+
+    fn ccontext(&self) -> CContextRef {
+        self.ccontext
     }
 }
 
@@ -83,10 +90,12 @@ impl Intrinsics {
         mappings
     }
 
-    pub unsafe fn defaults(context: LLVMContextRef, module: LLVMModuleRef) -> Intrinsics {
+    pub unsafe fn defaults(context: LLVMContextRef, module: LLVMModuleRef,
+                           ccontext: CContextRef) -> Intrinsics {
         let mut intrinsics = Intrinsics {
             context,
             module,
+            ccontext,
             intrinsics: FnvHashMap::default(),
         };
 

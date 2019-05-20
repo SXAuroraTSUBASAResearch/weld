@@ -26,6 +26,8 @@ use super::CodeGenExt;
 use super::CGenerator;
 use super::LLVM_VECTOR_WIDTH;
 
+use crate::codegen::c::CContextRef;
+
 /// Index of the pointer into the vector data structure.
 pub const POINTER_INDEX: u32 = 0;
 /// Index of the size into the vector data structure.
@@ -179,6 +181,7 @@ pub struct Vector {
     pub elem_ty: LLVMTypeRef,
     context: LLVMContextRef,
     module: LLVMModuleRef,
+    ccontext: CContextRef,
     new: Option<LLVMValueRef>,
     clone: Option<LLVMValueRef>,
     at: Option<LLVMValueRef>,
@@ -196,6 +199,10 @@ impl CodeGenExt for Vector {
     fn context(&self) -> LLVMContextRef {
         self.context
     }
+
+    fn ccontext(&self) -> CContextRef {
+        self.ccontext
+    }
 }
 
 impl Vector {
@@ -207,6 +214,7 @@ impl Vector {
         elem_ty: LLVMTypeRef,
         context: LLVMContextRef,
         module: LLVMModuleRef,
+        ccontext: CContextRef,
     ) -> Vector {
         let c_name = CString::new(name.as_ref()).unwrap();
         let mut layout = [LLVMPointerType(elem_ty, 0), LLVMInt64TypeInContext(context)];
@@ -216,6 +224,7 @@ impl Vector {
             name: c_name.into_string().unwrap(),
             context,
             module,
+            ccontext,
             vector_ty: vector,
             elem_ty,
             new: None,

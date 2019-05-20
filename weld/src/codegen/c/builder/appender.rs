@@ -20,6 +20,7 @@ use crate::codegen::c::intrinsic::Intrinsics;
 use crate::codegen::c::llvm_exts::*;
 use crate::codegen::c::CodeGenExt;
 use crate::codegen::c::LLVM_VECTOR_WIDTH;
+use crate::codegen::c::CContextRef;
 
 pub const POINTER_INDEX: u32 = 0;
 pub const SIZE_INDEX: u32 = 1;
@@ -36,6 +37,7 @@ pub struct Appender {
     pub name: String,
     context: LLVMContextRef,
     module: LLVMModuleRef,
+    ccontext: CContextRef,
     new: Option<LLVMValueRef>,
     merge: Option<LLVMValueRef>,
     vmerge: Option<LLVMValueRef>,
@@ -50,6 +52,10 @@ impl CodeGenExt for Appender {
     fn context(&self) -> LLVMContextRef {
         self.context
     }
+
+    fn ccontext(&self) -> CContextRef {
+        self.ccontext
+    }
 }
 
 impl Appender {
@@ -58,6 +64,7 @@ impl Appender {
         elem_ty: LLVMTypeRef,
         context: LLVMContextRef,
         module: LLVMModuleRef,
+        ccontext: CContextRef,
     ) -> Appender {
         let c_name = CString::new(name.as_ref()).unwrap();
         // An appender is struct with a pointer, size, and capacity.
@@ -74,6 +81,7 @@ impl Appender {
             name: c_name.into_string().unwrap(),
             context,
             module,
+            ccontext,
             new: None,
             merge: None,
             vmerge: None,

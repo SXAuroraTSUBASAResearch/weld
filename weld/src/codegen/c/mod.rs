@@ -185,6 +185,8 @@ pub fn compile(
 trait LlvmInputArg {
     /// LLVM type of the input struct.
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef;
+    /// C type of the input struct.
+//    unsafe fn c_type(context: CContextRef) -> String;
     /// Index of the data pointer in the struct.
     fn input_index() -> u32;
     /// Index of the number of workers value in the struct.
@@ -282,6 +284,25 @@ impl HasPointer for Type {
     }
 }
 
+/// A struct holding the C codegen state.  This is used instead of LLVMContext.
+pub struct CContext {
+    /// Names of basic types.  This map returns a name of a given type once
+    /// the name is declared.  For example, i16_type() outputs declaration of
+    /// i16 and set the name to this map.
+    basic_types: FnvHashMap<ScalarKind, String>,
+
+    i1_defined: bool,
+
+    /// A CodeBuilder and ID generator for prelude functions such as type
+    /// and struct definitions.
+    prelude_code: CodeBuilder,
+
+    /// A CodeBuilder for body functions in the module.
+    body_code: CodeBuilder,
+}
+
+type CContextRef = *mut CContext;
+
 /// A struct holding the global codegen state for an SIR program.
 pub struct CGenerator {
     /// A configuration for generating code.
@@ -292,6 +313,8 @@ pub struct CGenerator {
     context: LLVMContextRef,
     /// The main LLVM module to which code is added.
     module: LLVMModuleRef,
+    /// An C Context for isolating code generation.
+    ccontext: CContextRef,
     /// A map that tracks references to an SIR function's LLVM function.
     functions: FnvHashMap<FunctionId, LLVMValueRef>,
     /// A map tracking generated vectors.
@@ -334,13 +357,14 @@ pub struct CGenerator {
     struct_names: FnvHashMap<Type, CString>,
     /// Counter for unique struct names.
     struct_index: u32,
+}
 
-    /// A CodeBuilder and ID generator for prelude functions such as type
-    /// and struct definitions.
-    prelude_code: CodeBuilder,
-
-    /// A CodeBuilder for body functions in the module.
-    body_code: CodeBuilder,
+impl Drop for CGenerator {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.ccontext));
+        }
+    }
 }
 
 /// Defines helper methods for LLVM code generation.
@@ -353,6 +377,9 @@ pub trait CodeGenExt {
 
     /// Returns the context used by this code generator.
     fn context(&self) -> LLVMContextRef;
+
+    /// Returns the context used by this code generator.
+    fn ccontext(&self) -> CContextRef;
 
     /// Loads a value.
     ///
@@ -608,50 +635,110 @@ pub trait CodeGenExt {
     /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
     /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
     unsafe fn bool_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&Bool) {
+            (*self.ccontext()).prelude_code.add("typedef char bool;");
+            (*self.ccontext()).basic_types.insert(Bool, "bool".to_string());
+        }
         LLVMInt8TypeInContext(self.context())
     }
 
     unsafe fn i1_type(&self) -> LLVMTypeRef {
+        // Weld doesn't have I1 type, so use Unknown instead.
+        if !(*self.ccontext()).i1_defined {
+            (*self.ccontext()).prelude_code.add("typedef char i1;");
+            (*self.ccontext()).i1_defined = true;
+        }
         LLVMInt1TypeInContext(self.context())
     }
 
     unsafe fn i8_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I8) {
+            (*self.ccontext()).prelude_code.add("typedef char i8;");
+            (*self.ccontext()).basic_types.insert(I8, "i8".to_string());
+        }
         LLVMInt8TypeInContext(self.context())
     }
 
     unsafe fn u8_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U8) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned char u8;");
+            (*self.ccontext()).basic_types.insert(U8, "u8".to_string());
+        }
         LLVMInt8TypeInContext(self.context())
     }
 
     unsafe fn i16_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I16) {
+            (*self.ccontext()).prelude_code.add("typedef short i16;");
+            (*self.ccontext()).basic_types.insert(I16, "i16".to_string());
+        }
         LLVMInt16TypeInContext(self.context())
     }
 
     unsafe fn u16_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U16) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned short u16;");
+            (*self.ccontext()).basic_types.insert(U16, "u16".to_string());
+        }
         LLVMInt16TypeInContext(self.context())
     }
 
     unsafe fn i32_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I32) {
+            (*self.ccontext()).prelude_code.add("typedef int i32;");
+            (*self.ccontext()).basic_types.insert(I32, "i32".to_string());
+        }
         LLVMInt32TypeInContext(self.context())
     }
 
     unsafe fn u32_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U32) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned int u32;");
+            (*self.ccontext()).basic_types.insert(U32, "u32".to_string());
+        }
         LLVMInt32TypeInContext(self.context())
     }
 
     unsafe fn i64_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I64) {
+            (*self.ccontext()).prelude_code.add("typedef long i64;");
+            (*self.ccontext()).basic_types.insert(I64, "i64".to_string());
+        }
         LLVMInt64TypeInContext(self.context())
     }
 
     unsafe fn u64_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U64) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned long u64;");
+            (*self.ccontext()).basic_types.insert(U64, "u64".to_string());
+        }
         LLVMInt64TypeInContext(self.context())
     }
 
     unsafe fn f32_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&F32) {
+            (*self.ccontext()).prelude_code.add("typedef float f32;");
+            (*self.ccontext()).basic_types.insert(F32, "f32".to_string());
+        }
         LLVMFloatTypeInContext(self.context())
     }
 
     unsafe fn f64_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&F64) {
+            (*self.ccontext()).prelude_code.add("typedef double f64;");
+            (*self.ccontext()).basic_types.insert(F64, "f64".to_string());
+        }
         LLVMDoubleTypeInContext(self.context())
     }
 
@@ -734,6 +821,10 @@ impl CodeGenExt for CGenerator {
     fn context(&self) -> LLVMContextRef {
         self.context
     }
+
+    fn ccontext(&self) -> CContextRef {
+        self.ccontext
+    }
 }
 
 impl CGenerator {
@@ -741,13 +832,20 @@ impl CGenerator {
     unsafe fn new(conf: ParsedConf) -> WeldResult<CGenerator> {
         let context = LLVMContextCreate();
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
+        let ccontext_data = Box::new(CContext {
+            basic_types: FnvHashMap::default(),
+            i1_defined: false,
+            prelude_code: CodeBuilder::new(),
+            body_code: CodeBuilder::new(),
+        });
+        let ccontext: *mut CContext = Box::into_raw(ccontext_data);
 
         // These methods *must* be called before using any of the `CodeGenExt` extension methods.
         compile::init();
         compile::set_triple_and_layout(module)?;
 
         // Adds the default intrinsic definitions.
-        let intrinsics = intrinsic::Intrinsics::defaults(context, module);
+        let intrinsics = intrinsic::Intrinsics::defaults(context, module, ccontext);
 
         let target = target::Target::from_llvm_strings(
             llvm_exts::PROCESS_TRIPLE.to_str().unwrap(),
@@ -761,6 +859,7 @@ impl CGenerator {
             conf,
             context,
             module,
+            ccontext,
             target,
             functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
@@ -777,8 +876,6 @@ impl CGenerator {
             struct_names: FnvHashMap::default(),
             struct_index: 0,
             intrinsics,
-            prelude_code: CodeBuilder::new(),
-            body_code: CodeBuilder::new(),
         })
     }
 
@@ -837,6 +934,27 @@ impl CGenerator {
     unsafe fn gen_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
         use crate::ast::Type::Struct;
 
+        // Declare types
+        (*self.ccontext()).prelude_code.add("\
+typedef int i32;
+typedef long i64;
+");
+        (*self.ccontext()).body_code.add("\
+typedef struct {
+    i64 input;
+    i32 nworkers;
+    i64 memlimit;
+    i64 run;
+} input_args_t;
+
+typedef struct {
+    i64 output;
+    i64 run;
+    i64 errno;
+} output_args_t;
+");
+       // format!("void f{}_wrapper({}, i32 cur_tid) {{", func.id, serial_arg_types));
+
         let input_type = WeldInputArgs::llvm_type(self.context);
         let output_type = WeldOutputArgs::llvm_type(self.context);
 
@@ -855,6 +973,8 @@ impl CGenerator {
         let entry_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
         let init_run_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
         let get_arg_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
+
+        (*self.ccontext()).body_code.add(format!("i64 {}(i64 args) {{", self.conf.llvm.run_func_name));
 
         LLVMPositionBuilderAtEnd(builder, entry_block);
         let argument = LLVMGetParam(function, 0);
@@ -1690,6 +1810,7 @@ impl CGenerator {
                         value_ty,
                         self.context,
                         self.module,
+                        self.ccontext,
                     );
                     self.dictionaries.insert(ty.clone(), dict);
                 }
@@ -1697,10 +1818,14 @@ impl CGenerator {
             }
             Scalar(kind) => match kind {
                 Bool => self.bool_type(),
-                I8 | U8 => self.i8_type(),
-                I16 | U16 => self.i16_type(),
-                I32 | U32 => self.i32_type(),
-                I64 | U64 => self.i64_type(),
+                I8 => self.i8_type(),
+                U8 => self.u8_type(),
+                I16 => self.i16_type(),
+                U16 => self.u16_type(),
+                I32 => self.i32_type(),
+                U32 => self.u32_type(),
+                I64 => self.i64_type(),
+                U64 => self.u64_type(),
                 F32 => self.f32_type(),
                 F64 => self.f64_type(),
             },
@@ -1735,7 +1860,7 @@ impl CGenerator {
                 if !self.vectors.contains_key(elem_type) {
                     let llvm_elem_type = self.llvm_type(elem_type)?;
                     let vector =
-                        vector::Vector::define("vec", llvm_elem_type, self.context, self.module);
+                        vector::Vector::define("vec", llvm_elem_type, self.context, self.module, self.ccontext());
                     self.vectors.insert(elem_type.as_ref().clone(), vector);
                 }
                 self.vectors[elem_type].vector_ty
@@ -1751,8 +1876,11 @@ impl CGenerator {
     }
 
     fn gen_c_code(&self) -> String {
+        unsafe {
         format!("// PRELUDE:\n{}\n\n// BODY:\n{}\n",
-                self.prelude_code.result(), self.body_code.result())
+                (*self.ccontext()).prelude_code.result(),
+                (*self.ccontext()).body_code.result())
+        }
     }
 }
 

@@ -17,6 +17,7 @@ use crate::codegen::c::llvm_exts::*;
 use crate::codegen::c::numeric::gen_binop;
 use crate::codegen::c::CodeGenExt;
 use crate::codegen::c::LLVM_VECTOR_WIDTH;
+use crate::codegen::c::CContextRef;
 
 const SCALAR_INDEX: u32 = 0;
 const VECTOR_INDEX: u32 = 1;
@@ -30,6 +31,7 @@ pub struct Merger {
     pub op: BinOpKind,
     context: LLVMContextRef,
     module: LLVMModuleRef,
+    ccontext: CContextRef,
     new: Option<LLVMValueRef>,
     merge: Option<LLVMValueRef>,
     vmerge: Option<LLVMValueRef>,
@@ -44,6 +46,10 @@ impl CodeGenExt for Merger {
     fn context(&self) -> LLVMContextRef {
         self.context
     }
+
+    fn ccontext(&self) -> CContextRef {
+        self.ccontext
+    }
 }
 
 impl Merger {
@@ -54,6 +60,7 @@ impl Merger {
         scalar_kind: ScalarKind,
         context: LLVMContextRef,
         module: LLVMModuleRef,
+        ccontext: CContextRef,
     ) -> Merger {
         let c_name = CString::new(name.as_ref()).unwrap();
         let mut layout = [elem_ty, LLVMVectorType(elem_ty, LLVM_VECTOR_WIDTH)];
@@ -67,6 +74,7 @@ impl Merger {
             scalar_kind,
             context,
             module,
+            ccontext,
             new: None,
             merge: None,
             vmerge: None,

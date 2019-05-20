@@ -517,6 +517,7 @@ impl BuilderExpressionGen for CGenerator {
                             llvm_elem_type,
                             self.context,
                             self.module,
+                            self.ccontext,
                         );
                         self.appenders.insert(kind.clone(), appender);
                     }
@@ -546,6 +547,7 @@ impl BuilderExpressionGen for CGenerator {
                             scalar_kind,
                             self.context,
                             self.module,
+                            self.ccontext,
                         );
                         self.mergers.insert(kind.clone(), merger);
                     }

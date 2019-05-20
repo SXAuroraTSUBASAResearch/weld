@@ -26,6 +26,7 @@ use self::llvm_sys::LLVMTypeKind;
 use crate::codegen::c::intrinsic::Intrinsics;
 use crate::codegen::c::llvm_exts::LLVMExtAttribute::*;
 use crate::codegen::c::llvm_exts::*;
+use crate::codegen::c::CContextRef;
 
 // Need vector type for ToVec and Serialize.
 use crate::codegen::c::vector;
@@ -82,6 +83,7 @@ pub struct Dict {
     dict_inner_ty: LLVMTypeRef,
     context: LLVMContextRef,
     module: LLVMModuleRef,
+    ccontext: CContextRef,
     slot_for_key: Option<LLVMValueRef>, // DONE
     new: Option<LLVMValueRef>,          // DONE
     lookup: Option<LLVMValueRef>,       // DONE
@@ -128,6 +130,10 @@ impl CodeGenExt for Dict {
     fn context(&self) -> LLVMContextRef {
         self.context
     }
+
+    fn ccontext(&self) -> CContextRef {
+        self.ccontext
+    }
 }
 
 /// A dictionary slot.
@@ -142,6 +148,7 @@ pub struct SlotType {
     val_ty: LLVMTypeRef,
     module: LLVMModuleRef,
     context: LLVMContextRef,
+    ccontext: CContextRef,
 }
 
 impl CodeGenExt for SlotType {
@@ -152,6 +159,10 @@ impl CodeGenExt for SlotType {
     fn context(&self) -> LLVMContextRef {
         self.context
     }
+
+    fn ccontext(&self) -> CContextRef {
+        self.ccontext
+    }
 }
 
 impl SlotType {
@@ -161,6 +172,7 @@ impl SlotType {
         val_ty: LLVMTypeRef,
         context: LLVMContextRef,
         module: LLVMModuleRef,
+        ccontext: CContextRef,
     ) -> SlotType {
         // Create a name for the dictionary.
         let c_name = CString::new(name.as_ref()).unwrap();
@@ -192,6 +204,7 @@ impl SlotType {
             val_ty,
             context,
             module,
+            ccontext,
         }
     }
 
@@ -296,6 +309,7 @@ impl Dict {
         val_ty: LLVMTypeRef,
         context: LLVMContextRef,
         module: LLVMModuleRef,
+        ccontext: CContextRef,
     ) -> Dict {
         let c_name = CString::new(name.as_ref()).unwrap();
         let slot_ty = SlotType::new(
@@ -304,6 +318,7 @@ impl Dict {
             val_ty,
             context,
             module,
+            ccontext,
         );
 
         // A dictionary holds an array of slots along with a capacity and size.
@@ -336,6 +351,7 @@ impl Dict {
             slot_ty,
             context,
             module,
+            ccontext,
             slot_for_key: None,
             new: None,
             lookup: None,
