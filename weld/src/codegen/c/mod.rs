@@ -186,7 +186,7 @@ trait LlvmInputArg {
     /// LLVM type of the input struct.
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef;
     /// C type of the input struct.
-//    unsafe fn c_type(context: CContextRef) -> String;
+    unsafe fn c_type(ccontext: CContextRef) -> String;
     /// Index of the data pointer in the struct.
     fn input_index() -> u32;
     /// Index of the number of workers value in the struct.
@@ -198,6 +198,20 @@ trait LlvmInputArg {
 }
 
 impl LlvmInputArg for WeldInputArgs {
+    unsafe fn c_type(ccontext: CContextRef) -> String {
+        if !(*ccontext).input_arg_defined {
+            (*ccontext).body_code.add("\
+typedef struct {
+    i64 input;
+    i32 nworkers;
+    i64 memlimit;
+    i64 run;
+} input_args_t;
+");
+            (*ccontext).input_arg_defined = true;
+        }
+        "input_args_t".to_string()
+    }
     unsafe fn llvm_type(context: LLVMContextRef) -> LLVMTypeRef {
         let mut types = [
             LLVMInt64TypeInContext(context),
@@ -292,6 +306,8 @@ pub struct CContext {
     basic_types: FnvHashMap<ScalarKind, String>,
 
     i1_defined: bool,
+    input_arg_defined: bool,
+    output_arg_defined: bool,
 
     /// A CodeBuilder and ID generator for prelude functions such as type
     /// and struct definitions.
@@ -634,6 +650,128 @@ pub trait CodeGenExt {
     /// For instructions that require `i1` (e.g, conditional branching or select), the caller
     /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
     /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
+    unsafe fn bool_c_type(&self) -> String {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&Bool) {
+            (*self.ccontext()).prelude_code.add("typedef char bool;");
+            (*self.ccontext()).basic_types.insert(Bool, "bool".to_string());
+        }
+        (*self.ccontext()).basic_types.get(&Bool).unwrap().to_string()
+        // (*self.ccontext()).basic_types.get(ty).cloned().unwrap().as_ptr(),
+        //(*self.ccontext()).basic_types.
+    }
+
+    unsafe fn i1_c_type(&self) -> LLVMTypeRef {
+        if !(*self.ccontext()).i1_defined {
+            (*self.ccontext()).prelude_code.add("typedef char i1;");
+            (*self.ccontext()).i1_defined = true;
+        }
+        LLVMInt1TypeInContext(self.context())
+    }
+
+    unsafe fn i8_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I8) {
+            (*self.ccontext()).prelude_code.add("typedef char i8;");
+            (*self.ccontext()).basic_types.insert(I8, "i8".to_string());
+        }
+        LLVMInt8TypeInContext(self.context())
+    }
+
+    unsafe fn u8_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U8) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned char u8;");
+            (*self.ccontext()).basic_types.insert(U8, "u8".to_string());
+        }
+        LLVMInt8TypeInContext(self.context())
+    }
+
+    unsafe fn i16_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I16) {
+            (*self.ccontext()).prelude_code.add("typedef short i16;");
+            (*self.ccontext()).basic_types.insert(I16, "i16".to_string());
+        }
+        LLVMInt16TypeInContext(self.context())
+    }
+
+    unsafe fn u16_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U16) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned short u16;");
+            (*self.ccontext()).basic_types.insert(U16, "u16".to_string());
+        }
+        LLVMInt16TypeInContext(self.context())
+    }
+
+    unsafe fn i32_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I32) {
+            (*self.ccontext()).prelude_code.add("typedef int i32;");
+            (*self.ccontext()).basic_types.insert(I32, "i32".to_string());
+        }
+        LLVMInt32TypeInContext(self.context())
+    }
+
+    unsafe fn u32_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U32) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned int u32;");
+            (*self.ccontext()).basic_types.insert(U32, "u32".to_string());
+        }
+        LLVMInt32TypeInContext(self.context())
+    }
+
+    unsafe fn i64_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&I64) {
+            (*self.ccontext()).prelude_code.add("typedef long i64;");
+            (*self.ccontext()).basic_types.insert(I64, "i64".to_string());
+        }
+        LLVMInt64TypeInContext(self.context())
+    }
+
+    unsafe fn u64_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&U64) {
+            (*self.ccontext()).prelude_code.add("typedef unsigned long u64;");
+            (*self.ccontext()).basic_types.insert(U64, "u64".to_string());
+        }
+        LLVMInt64TypeInContext(self.context())
+    }
+
+    unsafe fn f32_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&F32) {
+            (*self.ccontext()).prelude_code.add("typedef float f32;");
+            (*self.ccontext()).basic_types.insert(F32, "f32".to_string());
+        }
+        LLVMFloatTypeInContext(self.context())
+    }
+
+    unsafe fn f64_c_type(&self) -> LLVMTypeRef {
+        use crate::ast::ScalarKind::*;
+        if !(*self.ccontext()).basic_types.contains_key(&F64) {
+            (*self.ccontext()).prelude_code.add("typedef double f64;");
+            (*self.ccontext()).basic_types.insert(F64, "f64".to_string());
+        }
+        LLVMDoubleTypeInContext(self.context())
+    }
+
+    unsafe fn void_c_type(&self) -> LLVMTypeRef {
+        LLVMVoidTypeInContext(self.context())
+    }
+
+    unsafe fn void_pointer_c_type(&self) -> LLVMTypeRef {
+        LLVMPointerType(self.i8_type(), 0)
+    }
+
+    /// Booleans are represented as `i8`.
+    ///
+    /// For instructions that require `i1` (e.g, conditional branching or select), the caller
+    /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
+    /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
     unsafe fn bool_type(&self) -> LLVMTypeRef {
         use crate::ast::ScalarKind::*;
         if !(*self.ccontext()).basic_types.contains_key(&Bool) {
@@ -644,7 +782,6 @@ pub trait CodeGenExt {
     }
 
     unsafe fn i1_type(&self) -> LLVMTypeRef {
-        // Weld doesn't have I1 type, so use Unknown instead.
         if !(*self.ccontext()).i1_defined {
             (*self.ccontext()).prelude_code.add("typedef char i1;");
             (*self.ccontext()).i1_defined = true;
@@ -835,6 +972,8 @@ impl CGenerator {
         let ccontext_data = Box::new(CContext {
             basic_types: FnvHashMap::default(),
             i1_defined: false,
+            input_arg_defined: false,
+            output_arg_defined: false,
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
         });
@@ -935,18 +1074,10 @@ impl CGenerator {
         use crate::ast::Type::Struct;
 
         // Declare types
-        (*self.ccontext()).prelude_code.add("\
-typedef int i32;
-typedef long i64;
-");
+        let i64_name = self.i64_c_type();
+        let i32_name = self.i32_c_type();
+        let c_input_type = WeldInputArgs::c_type(self.ccontext);
         (*self.ccontext()).body_code.add("\
-typedef struct {
-    i64 input;
-    i32 nworkers;
-    i64 memlimit;
-    i64 run;
-} input_args_t;
-
 typedef struct {
     i64 output;
     i64 run;
