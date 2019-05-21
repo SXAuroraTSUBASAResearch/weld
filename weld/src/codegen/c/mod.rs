@@ -1385,6 +1385,13 @@ impl CGenerator {
         }
         Ok(types)
     }
+    unsafe fn c_arguments(&mut self, func: &SirFunction) -> WeldResult<Vec<String>> {
+        let mut types = vec![];
+        for (sy, ty) in func.params.iter() {
+            types.push(format!("{} {}", self.c_type(ty)?, sy.name()));
+        }
+        Ok(types)
+    }
 
     /// Declare a function in the SIR module and track its reference.
     ///
@@ -1397,9 +1404,6 @@ impl CGenerator {
         // for C
         let function = format!("f{}", func.id);
         self.c_functions.insert(func.id, function);
-        // let mut arg_tys = self.argument_types(func)?;
-        // arg_tys.push(self.run_handle_type());
-        let ret_ty = self.c_type(&func.return_type)?;
 
         // for LLVM
         let mut arg_tys = self.argument_types(func)?;
@@ -1495,8 +1499,16 @@ impl CGenerator {
         func: &SirFunction,
     ) -> WeldResult<()> {
         // for C
+        let mut arg_tys = self.c_arguments(func)?;
+        arg_tys.push(format!("{} {}", self.run_handle_c_type(), "run"));
+        let args_line = self.intrinsics.c_args_string(&arg_tys);
+        let ret_ty = self.c_type(&func.return_type)?.to_string();
         let function = &self.c_functions[&func.id];
-        (*self.ccontext()).body_code.add(format!("void {}()", function));
+        (*self.ccontext()).body_code.add(format!("{ret_ty} {fun}({args})",
+            ret_ty=ret_ty,
+            fun=function,
+            args=args_line,
+        ));
         (*self.ccontext()).body_code.add("{\n");
         (*self.ccontext()).body_code.add("}\n");
         // for LLVM
