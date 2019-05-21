@@ -76,6 +76,19 @@ impl CodeGenExt for Intrinsics {
     }
 }
 
+    // helper function
+    pub fn c_args(args: &[String]) -> String {
+        let mut arg_line = String::new();
+        let mut last_arg: &str = "";
+        for arg in args {
+            if !last_arg.is_empty() {
+                arg_line = format!("{}{}, ", arg_line, last_arg);
+            }
+            last_arg = arg;
+        }
+        format!("{}{}", arg_line, last_arg)
+    }
+
 impl Intrinsics {
     /// Returns value to function pointer mappings for non-builtin intrinsics.
     ///
@@ -180,6 +193,24 @@ impl Intrinsics {
         }
     }
 
+    /// Convinience wrapper for calling any functions.
+    pub unsafe fn c_call(
+        &mut self,
+        fun: &str,
+        args: &[String],
+        result: Option<&str>,
+    ) {
+        let arg_line = c_args(args);
+        match result {
+            Some(r) =>
+                (*self.ccontext()).body_code.add(format!(
+                    "{} = {}({});", r, fun, arg_line)),
+            None =>
+                (*self.ccontext()).body_code.add(format!(
+                    "(void){}({});", fun, arg_line)),
+        }
+    }
+
     /// Convinience wrapper for calling the `weld_run_init` intrinsic.
     pub unsafe fn call_weld_run_init(
         &mut self,
@@ -213,6 +244,14 @@ impl Intrinsics {
             args.len() as u32,
             name.unwrap_or(c_str!("")),
         )
+    }
+    pub unsafe fn c_call_weld_run_get_result(
+        &mut self,
+        run: String,
+        name: Option<&str>,
+    ) {
+        let args = [run];
+        self.c_call("weld_runst_get_result", &args, name);
     }
 
     /// Convinience wrapper for calling the `weld_run_set_result` intrinsic.

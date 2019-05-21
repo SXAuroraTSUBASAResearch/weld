@@ -200,15 +200,15 @@ trait LlvmInputArg {
 impl LlvmInputArg for WeldInputArgs {
     unsafe fn c_type(ccontext: CContextRef) -> &'static str {
         if !(*ccontext).input_arg_defined {
-            (*ccontext).prelude_code.add("\
-typedef struct {
-    i64 input;
-    i32 nworkers;
-    i64 memlimit;
-    i64 run;
-} input_args_t;
+            (*ccontext).prelude_code.add(format!("\
+typedef struct {{
+    {i64} input;
+    {i32} nworkers;
+    {i64} memlimit;
+    {i64} run;
+}} input_args_t;
 
-");
+", i64=i64_c_type(ccontext), i32=i32_c_type(ccontext)));
             (*ccontext).input_arg_defined = true;
         }
         "input_args_t"
@@ -259,14 +259,14 @@ trait LlvmOutputArg {
 impl LlvmOutputArg for WeldOutputArgs {
     unsafe fn c_type(ccontext: CContextRef) -> &'static str {
         if !(*ccontext).output_arg_defined {
-            (*ccontext).prelude_code.add("\
-typedef struct {
-    i64 output;
-    i64 run;
-    i64 errno;
-} output_args_t;
+            (*ccontext).prelude_code.add(format!("\
+typedef struct {{
+    {i64} output;
+    {i64} run;
+    {i64} errno;
+}} output_args_t;
 
-");
+", i64=i64_c_type(ccontext)));
             (*ccontext).output_arg_defined = true;
         }
         "output_args_t"
@@ -293,6 +293,135 @@ typedef struct {
     fn errno_index() -> u32 {
         2
     }
+}
+
+/// Booleans are represented as `i8`.
+///
+/// For instructions that require `i1` (e.g, conditional branching or select), the caller
+/// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
+/// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
+unsafe fn bool_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&Bool) {
+        (*ccontext).prelude_code.add("typedef char bool;");
+        (*ccontext).basic_types.insert(Bool, "bool".to_string());
+    }
+    (*ccontext).basic_types.get(&Bool).unwrap()
+}
+
+unsafe fn i1_c_type(ccontext: CContextRef) -> &'static str {
+    if !(*ccontext).i1_defined {
+        (*ccontext).prelude_code.add("typedef char i1;");
+        (*ccontext).i1_defined = true;
+    }
+    "i1"
+}
+
+unsafe fn i8_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&I8) {
+        (*ccontext).prelude_code.add("typedef char i8;");
+        (*ccontext).basic_types.insert(I8, "i8".to_string());
+    }
+    (*ccontext).basic_types.get(&I8).unwrap()
+}
+
+unsafe fn u8_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&U8) {
+        (*ccontext).prelude_code.add("typedef unsigned char u8;");
+        (*ccontext).basic_types.insert(U8, "u8".to_string());
+    }
+    (*ccontext).basic_types.get(&U8).unwrap()
+}
+
+unsafe fn i16_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&I16) {
+        (*ccontext).prelude_code.add("typedef short i16;");
+        (*ccontext).basic_types.insert(I16, "i16".to_string());
+    }
+    (*ccontext).basic_types.get(&I16).unwrap()
+}
+
+unsafe fn u16_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&U16) {
+        (*ccontext).prelude_code.add("typedef unsigned short u16;");
+        (*ccontext).basic_types.insert(U16, "u16".to_string());
+    }
+    (*ccontext).basic_types.get(&U16).unwrap()
+}
+
+unsafe fn i32_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&I32) {
+        (*ccontext).prelude_code.add("typedef int i32;");
+        (*ccontext).basic_types.insert(I32, "i32".to_string());
+    }
+    (*ccontext).basic_types.get(&I32).unwrap()
+}
+
+unsafe fn u32_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&U32) {
+        (*ccontext).prelude_code.add("typedef unsigned int u32;");
+        (*ccontext).basic_types.insert(U32, "u32".to_string());
+    }
+    (*ccontext).basic_types.get(&U32).unwrap()
+}
+
+unsafe fn i64_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&I64) {
+        (*ccontext).prelude_code.add("typedef long i64;");
+        (*ccontext).basic_types.insert(I64, "i64".to_string());
+    }
+    (*ccontext).basic_types.get(&I64).unwrap()
+}
+
+unsafe fn u64_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&U64) {
+        (*ccontext).prelude_code.add("typedef unsigned long u64;");
+        (*ccontext).basic_types.insert(U64, "u64".to_string());
+    }
+    (*ccontext).basic_types.get(&U64).unwrap()
+}
+
+unsafe fn f32_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&F32) {
+        (*ccontext).prelude_code.add("typedef float f32;");
+        (*ccontext).basic_types.insert(F32, "f32".to_string());
+    }
+    (*ccontext).basic_types.get(&F32).unwrap()
+}
+
+unsafe fn f64_c_type(ccontext: CContextRef) -> &'static str {
+    use crate::ast::ScalarKind::*;
+    if !(*ccontext).basic_types.contains_key(&F64) {
+        (*ccontext).prelude_code.add("typedef double f64;");
+        (*ccontext).basic_types.insert(F64, "f64".to_string());
+    }
+    (*ccontext).basic_types.get(&F64).unwrap()
+}
+
+unsafe fn void_c_type(_ccontext: CContextRef) -> &'static str {
+    "void"
+}
+
+unsafe fn void_pointer_c_type(_ccontext: CContextRef) -> &'static str {
+    "void*"
+}
+
+unsafe fn run_handle_c_type(ccontext: CContextRef) -> &'static str {
+    if !(*ccontext).run_handle_defined {
+        (*ccontext).prelude_code.add(
+            "typedef struct { char } RunHandle;");
+        (*ccontext).run_handle_defined = true;
+    }
+    "RunHandle*"
 }
 
 /// Specifies whether a type contains a pointer in generated code.
@@ -352,6 +481,8 @@ pub struct CGenerator {
     ccontext: CContextRef,
     /// A map that tracks references to an SIR function's LLVM function.
     functions: FnvHashMap<FunctionId, LLVMValueRef>,
+    /// A map that tracks references to an SIR function's LLVM function.
+    c_functions: FnvHashMap<FunctionId, String>,
     /// A map tracking generated vectors.
     ///
     /// The key maps the *element type* to the vector's type reference and methods on it.
@@ -676,127 +807,63 @@ pub trait CodeGenExt {
     /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
     /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
     unsafe fn bool_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&Bool) {
-            (*self.ccontext()).prelude_code.add("typedef char bool;");
-            (*self.ccontext()).basic_types.insert(Bool, "bool".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&Bool).unwrap()
+        bool_c_type(self.ccontext())
     }
 
     unsafe fn i1_c_type(&self) -> &str {
-        if !(*self.ccontext()).i1_defined {
-            (*self.ccontext()).prelude_code.add("typedef char i1;");
-            (*self.ccontext()).i1_defined = true;
-        }
-        "i1"
+        i1_c_type(self.ccontext())
     }
 
     unsafe fn i8_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&I8) {
-            (*self.ccontext()).prelude_code.add("typedef char i8;");
-            (*self.ccontext()).basic_types.insert(I8, "i8".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&I8).unwrap()
+        i8_c_type(self.ccontext())
     }
 
     unsafe fn u8_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&U8) {
-            (*self.ccontext()).prelude_code.add("typedef unsigned char u8;");
-            (*self.ccontext()).basic_types.insert(U8, "u8".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&U8).unwrap()
+        u8_c_type(self.ccontext())
     }
 
     unsafe fn i16_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&I16) {
-            (*self.ccontext()).prelude_code.add("typedef short i16;");
-            (*self.ccontext()).basic_types.insert(I16, "i16".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&I16).unwrap()
+        i16_c_type(self.ccontext())
     }
 
     unsafe fn u16_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&U16) {
-            (*self.ccontext()).prelude_code.add("typedef unsigned short u16;");
-            (*self.ccontext()).basic_types.insert(U16, "u16".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&U16).unwrap()
+        u16_c_type(self.ccontext())
     }
 
     unsafe fn i32_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&I32) {
-            (*self.ccontext()).prelude_code.add("typedef int i32;");
-            (*self.ccontext()).basic_types.insert(I32, "i32".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&I32).unwrap()
+        i32_c_type(self.ccontext())
     }
 
     unsafe fn u32_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&U32) {
-            (*self.ccontext()).prelude_code.add("typedef unsigned int u32;");
-            (*self.ccontext()).basic_types.insert(U32, "u32".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&U32).unwrap()
+        u32_c_type(self.ccontext())
     }
 
     unsafe fn i64_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&I64) {
-            (*self.ccontext()).prelude_code.add("typedef long i64;");
-            (*self.ccontext()).basic_types.insert(I64, "i64".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&I64).unwrap()
+        i64_c_type(self.ccontext())
     }
 
     unsafe fn u64_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&U64) {
-            (*self.ccontext()).prelude_code.add("typedef unsigned long u64;");
-            (*self.ccontext()).basic_types.insert(U64, "u64".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&U64).unwrap()
+        u64_c_type(self.ccontext())
     }
 
     unsafe fn f32_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&F32) {
-            (*self.ccontext()).prelude_code.add("typedef float f32;");
-            (*self.ccontext()).basic_types.insert(F32, "f32".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&F32).unwrap()
+        f32_c_type(self.ccontext())
     }
 
     unsafe fn f64_c_type(&self) -> &str {
-        use crate::ast::ScalarKind::*;
-        if !(*self.ccontext()).basic_types.contains_key(&F64) {
-            (*self.ccontext()).prelude_code.add("typedef double f64;");
-            (*self.ccontext()).basic_types.insert(F64, "f64".to_string());
-        }
-        (*self.ccontext()).basic_types.get(&F64).unwrap()
+        f64_c_type(self.ccontext())
     }
 
     unsafe fn void_c_type(&self) -> &str {
-        "void"
+        void_c_type(self.ccontext())
     }
 
     unsafe fn void_pointer_c_type(&self) -> &str {
-        "void*"
+        void_pointer_c_type(self.ccontext())
     }
 
-    unsafe fn c_run_handle_type(&self) -> &str {
-        if !(*self.ccontext()).run_handle_defined {
-            (*self.ccontext()).prelude_code.add(
-                "typedef struct { char } RunHandle;");
-            (*self.ccontext()).run_handle_defined = true;
-        }
-        "RunHandle*"
+    unsafe fn run_handle_c_type(&self) -> &str {
+        run_handle_c_type(self.ccontext())
     }
 
     /// Booleans are represented as `i8`.
@@ -976,6 +1043,7 @@ impl CGenerator {
             ccontext,
             target,
             functions: FnvHashMap::default(),
+            c_functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
             c_vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
@@ -1050,17 +1118,15 @@ impl CGenerator {
     unsafe fn gen_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
         use crate::ast::Type::Struct;
 
-        // Declare types
+        // Declare types.
         // for C
-        self.i64_c_type();
-        self.i32_c_type();
         let c_input_type = WeldInputArgs::c_type(self.ccontext);
         let c_output_type = WeldOutputArgs::c_type(self.ccontext);
         // for LLVM
         let input_type = WeldInputArgs::llvm_type(self.context);
         let output_type = WeldOutputArgs::llvm_type(self.context);
 
-        // Declare run function
+        // Declare run function.
         // for C
         (*self.ccontext()).body_code.add(format!("i64 {}(i64 args) {{", self.conf.llvm.run_func_name));
         // for LLVM
@@ -1095,8 +1161,8 @@ impl CGenerator {
 
         // Check whether we already have an existing run.
         // for C
-        (*self.ccontext()).body_code.add(format!("{} handle = ({})in_args->run;", self.c_run_handle_type(), self.c_run_handle_type()));
-        (*self.ccontext()).body_code.add(format!("if (handle == 0) {{"));
+        (*self.ccontext()).body_code.add(format!("{handle} handle = ({handle})in_args->run;", handle=self.run_handle_c_type()));
+        (*self.ccontext()).body_code.add("if (handle == 0) {");
         
         // for LLVM
         let run_pointer =
@@ -1113,10 +1179,10 @@ impl CGenerator {
         );
         LLVMBuildCondBr(builder, null_check, init_run_block, get_arg_block);
 
-        // Generate codes for init_run block
+        // Generate codes for init_run block.
         // for C
-        (*self.ccontext()).body_code.add(format!("handle = weld_runst_init(in_args->nworkers, in_args->memlimit);"));
-        (*self.ccontext()).body_code.add(format!("}}"));
+        (*self.ccontext()).body_code.add("handle = weld_runst_init(in_args->nworkers, in_args->memlimit);");
+        (*self.ccontext()).body_code.add("}");
         // for LLVM
         LLVMPositionBuilderAtEnd(builder, init_run_block);
         let nworkers_pointer = LLVMBuildStructGEP(
@@ -1138,7 +1204,11 @@ impl CGenerator {
             .call_weld_run_init(builder, nworkers, memlimit, None);
         LLVMBuildBr(builder, get_arg_block);
 
-        // Generate codes for get_arg block
+        // Generate codes for get_arg block.
+        // for C
+        let arg_ty = &Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
+        (*self.ccontext()).body_code.add(format!("{ty}* arg = ({ty}*)(in_args->input);", ty=self.c_type(arg_ty)?));
+
         // for LLVM
         LLVMPositionBuilderAtEnd(builder, get_arg_block);
         let run = LLVMBuildPhi(builder, self.run_handle_type(), c_str!(""));
@@ -1168,8 +1238,6 @@ impl CGenerator {
             LLVMPointerType(llvm_arg_ty, 0),
             c_str!("arg"),
         );
-        // for C
-        (*self.ccontext()).body_code.add(format!("{ty}* arg = ({ty}*)(in_args->input);", ty=self.c_type(arg_ty)?));
 
         // Function arguments are sorted by symbol name - arrange the inputs in the proper order.
         let mut params: Vec<(&Symbol, u32)> = program
@@ -1181,6 +1249,13 @@ impl CGenerator {
 
         params.sort();
 
+        // Prepare entry_function's arguments list.
+        // for C
+        let mut c_func_args = vec![];
+        for (_, i) in params.iter() {
+            c_func_args.push(format!("arg->s{}", i));
+        }
+        // for LLVM
         let mut func_args = vec![];
         for (_, i) in params.iter() {
             let pointer = LLVMBuildStructGEP(builder, arg_struct_pointer, *i, c_str!("param"));
@@ -1188,9 +1263,17 @@ impl CGenerator {
             func_args.push(value);
         }
         // Push the run handle.
+        // for C
+        c_func_args.push("handle".to_string());
+        // for LLVM
         func_args.push(run);
 
         // Run the Weld program.
+        // for C
+        self.intrinsics.c_call(&self.c_functions[&program.funcs[0].id],
+                               &c_func_args,
+                               None);
+        // for LLVM
         let entry_function = self.functions[&program.funcs[0].id];
         let inst = LLVMBuildCall(
             builder,
@@ -1201,6 +1284,10 @@ impl CGenerator {
         );
         LLVMSetInstructionCallConv(inst, SIR_FUNC_CALL_CONV);
 
+        // Get the results.
+        // for C
+        let result = self.intrinsics.c_call_weld_run_get_result("handle".to_string(), None);
+        // for LLVM
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
         let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
         let errno = self
@@ -1267,6 +1354,10 @@ impl CGenerator {
     ///
     /// This method only defines functions and does not generate code for the function.
     unsafe fn declare_sir_function(&mut self, func: &SirFunction) -> WeldResult<()> {
+        // for C
+        let function = format!("f{}", func.id);
+        self.c_functions.insert(func.id, function);
+        // for LLVM
         let mut arg_tys = self.argument_types(func)?;
         arg_tys.push(self.run_handle_type());
         let ret_ty = self.llvm_type(&func.return_type)?;
@@ -1338,6 +1429,12 @@ impl CGenerator {
         program: &SirProgram,
         func: &SirFunction,
     ) -> WeldResult<()> {
+        // for C
+        let function = &self.c_functions[&func.id];
+        (*self.ccontext()).body_code.add(format!("void {}()", function));
+        (*self.ccontext()).body_code.add("{\n");
+        (*self.ccontext()).body_code.add("}\n");
+        // for LLVM
         let function = self.functions[&func.id];
         // + 1 to account for the run handle.
         if LLVMCountParams(function) != (1 + func.params.len()) as u32 {
