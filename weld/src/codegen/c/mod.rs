@@ -419,7 +419,7 @@ unsafe fn void_pointer_c_type(_ccontext: CContextRef) -> &'static str {
 unsafe fn run_handle_c_type(ccontext: CContextRef) -> &'static str {
     if !(*ccontext).run_handle_defined {
         (*ccontext).prelude_code.add(
-            "typedef struct { char } RunHandle;");
+            "typedef struct { char f; } RunHandle;");
         (*ccontext).run_handle_defined = true;
     }
     "RunHandle*"
@@ -729,6 +729,9 @@ pub trait CodeGenExt {
     /// Returns the constant size of a type.
     unsafe fn size_of(&self, ty: LLVMTypeRef) -> LLVMValueRef {
         LLVMSizeOf(ty)
+    }
+    unsafe fn c_size_of(&self, ty: &str) -> String {
+        format!("sizeof({})", ty)
     }
 
     /// Returns the constant size of a type in bits.
@@ -1152,7 +1155,7 @@ impl CGenerator {
 
         // Generate codes for entry block
         // for C
-        (*self.ccontext()).body_code.add(format!("{}* in_args = ({}*)args;", c_input_type, c_input_type));
+        (*self.ccontext()).body_code.add(format!("{input}* input = ({input}*)args;", input=c_input_type));
         // for LLVM
         LLVMPositionBuilderAtEnd(builder, entry_block);
         let argument = LLVMGetParam(function, 0);
@@ -1165,7 +1168,7 @@ impl CGenerator {
 
         // Check whether we already have an existing run.
         // for C
-        (*self.ccontext()).body_code.add(format!("{handle} run = ({handle})in_args->run;", handle=self.run_handle_c_type()));
+        (*self.ccontext()).body_code.add(format!("{handle} run = ({handle})input->run;", handle=self.run_handle_c_type()));
         (*self.ccontext()).body_code.add("if (run == 0) {");
         
         // for LLVM
@@ -1186,8 +1189,8 @@ impl CGenerator {
         // Generate codes for init_run block.
         // for C
         self.intrinsics.c_call_weld_run_init(
-            "in_args->nworkers",
-            "in_args->memlimit",
+            "input->nworkers",
+            "input->memlimit",
             Some("run".to_string()),
         );
         (*self.ccontext()).body_code.add("}");
@@ -1215,7 +1218,7 @@ impl CGenerator {
         // Generate codes for get_arg block.
         // for C
         let arg_ty = &Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
-        (*self.ccontext()).body_code.add(format!("{ty}* arg = ({ty}*)(in_args->input);", ty=self.c_type(arg_ty)?));
+        (*self.ccontext()).body_code.add(format!("{ty}* arg = ({ty}*)(input->input);", ty=self.c_type(arg_ty)?));
 
         // for LLVM
         LLVMPositionBuilderAtEnd(builder, get_arg_block);
@@ -1261,7 +1264,7 @@ impl CGenerator {
         // for C
         let mut c_func_args = vec![];
         for (_, i) in params.iter() {
-            c_func_args.push(format!("arg->s{}", i));
+            c_func_args.push(format!("arg->f{}", i));
         }
         // for LLVM
         let mut func_args = vec![];
@@ -1293,11 +1296,18 @@ impl CGenerator {
         );
         LLVMSetInstructionCallConv(inst, SIR_FUNC_CALL_CONV);
 
-        // Get the results.
+        // Get the results, errno, and run.
         // for C
-        let result = self.intrinsics.c_call_weld_run_get_result("run", None);
-        let result_i64 = (*self.ccontext()).var_ids.next();
-        (*self.ccontext()).body_code.add(format!("{i64} {result_i64} = ({i64}){result};", i64=self.i64_c_type(), result_i64=result_i64, result=result));
+        let res = self.intrinsics.c_call_weld_run_get_result("run", None);
+        let c_result = (*self.ccontext()).var_ids.next();
+        (*self.ccontext()).body_code.add(format!(
+            "{i64} {result} = ({i64}){res};",
+            i64=self.i64_c_type(), result=c_result, res=res));
+        let c_errno = self.intrinsics.c_call_weld_run_get_errno("run", None);
+        let c_run_int = (*self.ccontext()).var_ids.next();
+        (*self.ccontext()).body_code.add(format!(
+            "{i64} {run_int} = ({i64})run;",
+            i64=self.i64_c_type(), run_int=c_run_int));
         // for LLVM
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
         let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
@@ -1306,6 +1316,20 @@ impl CGenerator {
             .call_weld_run_get_errno(builder, run, Some(c_str!("errno")));
         let run_int = LLVMBuildPtrToInt(builder, run, self.i64_type(), c_str!("run"));
 
+        // Generate Output
+        // for C
+        let return_size = self.c_size_of(c_output_type);
+        let return_pointer = self
+            .intrinsics
+            .c_call_weld_run_malloc("run", &return_size, None);
+        (*self.ccontext()).body_code.add(format!("{output}* output = ({output}*){ptr};", output=c_output_type, ptr=return_pointer));
+        (*self.ccontext()).body_code.add(format!(
+            "output->output = {};", c_result));
+        (*self.ccontext()).body_code.add(format!(
+            "output->run = {};", c_run_int));
+        (*self.ccontext()).body_code.add(format!(
+            "output->errno = {};", c_errno));
+        // for LLVM
         let mut output = LLVMGetUndef(output_type);
         output = LLVMBuildInsertValue(
             builder,
@@ -1340,6 +1364,11 @@ impl CGenerator {
             c_str!(""),
         );
 
+        // Generate Return instruction.
+        // for C
+        (*self.ccontext()).body_code.add(format!(
+            "return ({})output;\n}}", self.i64_c_type()));
+        // for LLVM
         LLVMBuildStore(builder, output, return_pointer);
         let return_value = LLVMBuildPtrToInt(builder, return_pointer, self.i64_type(), c_str!(""));
         LLVMBuildRet(builder, return_value);
@@ -1396,14 +1425,14 @@ impl CGenerator {
         result: Option<String>,
     ) -> WeldResult<String> {
         if let Some(res) = result {
-        let fun = &self.c_functions[&func.id];
+            let fun = &self.c_functions[&func.id];
             (*self.ccontext()).body_code.add(format!(
                 "{} = {}({});", res, fun, args_line));
             Ok(res)
         } else {
             let res = (*self.ccontext()).var_ids.next();
             let ret_ty = self.c_type(&func.return_type)?.to_string();
-        let fun = &self.c_functions[&func.id];
+            let fun = &self.c_functions[&func.id];
             (*self.ccontext()).body_code.add(format!(
                 "{} {} = {}({});", ret_ty, res, fun, args_line));
             Ok(res)
@@ -2188,7 +2217,7 @@ impl CGenerator {
                     let mut def = CodeBuilder::new();
                     def.add("typedef struct {");
                     for (i, e) in elems.iter().enumerate() {
-                        def.add(format!("{} s{};", self.c_type(e)?, i));
+                        def.add(format!("{} f{};", self.c_type(e)?, i));
                     }
                     def.add(format!("}} {};", name));
                     (*self.ccontext()).prelude_code.add(def.result());

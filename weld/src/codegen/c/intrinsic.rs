@@ -23,9 +23,6 @@ use super::llvm_exts::*;
 
 use super::CodeGenExt;
 use super::LLVM_VECTOR_WIDTH;
-use super::i32_c_type;
-use super::i64_c_type;
-use super::u64_c_type;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
@@ -327,6 +324,17 @@ impl Intrinsics {
             name.unwrap_or(c_str!("")),
         )
     }
+    pub unsafe fn c_call_weld_run_malloc(
+        &mut self,
+        run: &str,
+        size: &str,
+        name: Option<String>,
+    ) -> String {
+        let args = [run, size];
+        let run_handle_type = self.run_handle_c_type().to_string();
+        self.c_call("weld_runst_malloc", &args, &run_handle_type, name)
+    }
+
 
     /// Convinience wrapper for calling the `weld_run_remalloc` intrinsic.
     pub unsafe fn call_weld_run_realloc(
@@ -380,6 +388,15 @@ impl Intrinsics {
             name.unwrap_or(c_str!("")),
         )
     }
+    pub unsafe fn c_call_weld_run_get_errno(
+        &mut self,
+        run: &str,
+        name: Option<String>,
+    ) -> String {
+        let args = [run];
+        self.c_call("weld_runst_get_errno", &args, "i64", name)
+    }
+
 
     /// Convinience wrapper for calling the `weld_runst_set_errno` intrinsic.
     pub unsafe fn call_weld_run_set_errno(
@@ -545,9 +562,9 @@ typedef struct {{
     {u64} allocated;
 }} WeldRuntimeContext;
 typedef WeldRuntimeContext* WeldRuntimeContextRef;",
-            i32=i32_c_type(self.ccontext()),
-            i64=i64_c_type(self.ccontext()),
-            u64=u64_c_type(self.ccontext()),
+            i32=self.i32_c_type(),
+            i64=self.i64_c_type(),
+            u64=self.u64_c_type(),
         ));
 
         let int8p = LLVMPointerType(self.i8_type(), 0);
@@ -567,9 +584,10 @@ typedef WeldRuntimeContext* WeldRuntimeContextRef;",
             Intrinsic::FunctionPointer(function, ffi::weld_runst_init as *mut c_void),
         );
         (*self.ccontext()).prelude_code.add(format!("\
-{run_handle_type} weld_runst_init({i32} nworkers, {i64} memlimit)
+extern void* malloc({u64});
+{run_handle} weld_runst_init({i32} nworkers, {i64} memlimit)
 {{
-    WeldRunTimeContextRef run =
+    WeldRuntimeContextRef run =
         (WeldRuntimeContextRef)malloc(sizeof(WeldRuntimeContext));
     assert(run != 0);
     // run->allocations = FnvHashMap::default();
@@ -578,11 +596,12 @@ typedef WeldRuntimeContext* WeldRuntimeContextRef;",
     run->nworkers = nworkers;
     run->memlimit = memlimit;
     run->allocated = 0;
-    return ({run_handle_type})run;
+    return ({run_handle})run;
 }}",
-            run_handle_type=self.run_handle_c_type(),
-            i32=i32_c_type(self.ccontext()),
-            i64=i64_c_type(self.ccontext()),
+            run_handle=self.run_handle_c_type(),
+            i32=self.i32_c_type(),
+            i64=self.i64_c_type(),
+            u64=self.u64_c_type(),
         ));
 
         let mut params = vec![self.run_handle_type()];
@@ -600,11 +619,13 @@ typedef WeldRuntimeContext* WeldRuntimeContextRef;",
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_get_result as *mut c_void),
         );
-        (*self.ccontext()).prelude_code.add("\
-void* weld_runst_get_result(WeldRuntimeContextRef run)
-{
-    return run->result;
-}");
+        (*self.ccontext()).prelude_code.add(format!("\
+void* weld_runst_get_result({run_handle} run)
+{{
+    return ((WeldRuntimeContextRef)run)->result;
+}}",
+            run_handle=self.run_handle_c_type(),
+        ));
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_set_result").unwrap();
@@ -632,6 +653,49 @@ void* weld_runst_get_result(WeldRuntimeContextRef run)
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_malloc as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add(format!("\
+void* weld_runst_malloc({run_handle} run, {u64} size)
+{{
+    // return ((WeldRuntimeContextRef)run)->result;
+    return malloc(size);
+}}",
+            run_handle=self.run_handle_c_type(),
+            u64=self.u64_c_type(),
+        ));
+/*
+    unsafe fn malloc(&mut self, size: i64) -> Ptr {
+        if size == 0 {
+            trace!("Alloc'd 0-size pointer (null)");
+            return ptr::null_mut();
+        }
+
+        let size = size as usize;
+
+        if self.allocated + size > self.memlimit {
+            self.errno = WeldRuntimeErrno::OutOfMemory;
+            panic!(
+                "Weld run ran out of memory (limit={}, attempted to allocate {}",
+                self.memlimit,
+                self.allocated + size
+            );
+        }
+        let layout = Layout::from_size_align_unchecked(size as usize, DEFAULT_ALIGN);
+        let mem = Allocator.alloc(layout);
+
+        self.allocated += layout.size();
+        trace!("Alloc'd pointer {:?} ({} bytes)", mem, layout.size());
+
+        self.allocations.insert(mem, layout);
+        mem
+    }
+
+#[no_mangle]
+/// Allocate memory within the provided context.
+pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int64_t) -> Ptr {
+    let run = &mut *run;
+    run.malloc(size)
+}
+*/
 
         let mut params = vec![self.run_handle_type(), int8p, self.i64_type()];
         let name = CString::new("weld_runst_realloc").unwrap();
@@ -675,6 +739,14 @@ void* weld_runst_get_result(WeldRuntimeContextRef run)
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_get_errno as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add(format!("\
+{i64} weld_runst_get_errno({run_handle} run)
+{{
+    return ((WeldRuntimeContextRef)run)->errno;
+}}",
+            run_handle=self.run_handle_c_type(),
+            i64=self.i64_c_type(),
+        ));
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];
         let name = CString::new("weld_runst_set_errno").unwrap();
