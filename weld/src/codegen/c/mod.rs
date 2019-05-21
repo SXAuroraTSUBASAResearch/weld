@@ -66,6 +66,7 @@ use crate::conf::ParsedConf;
 use crate::error::*;
 use crate::sir::*;
 use crate::util::stats::CompilationStats;
+use crate::util::id::IdGenerator;
 use code_builder::CodeBuilder;
 
 use self::llvm_sys::core::*;
@@ -456,6 +457,8 @@ pub struct CContext {
     input_arg_defined: bool,
     output_arg_defined: bool,
     run_handle_defined: bool,
+
+    var_ids: IdGenerator,
 
     /// A CodeBuilder and ID generator for prelude functions such as type
     /// and struct definitions.
@@ -1016,6 +1019,7 @@ impl CGenerator {
             input_arg_defined: false,
             output_arg_defined: false,
             run_handle_defined: false,
+            var_ids: IdGenerator::new("t"),
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
         });
@@ -1270,9 +1274,9 @@ impl CGenerator {
 
         // Run the Weld program.
         // for C
-        self.intrinsics.c_call(&self.c_functions[&program.funcs[0].id],
-                               &c_func_args,
-                               None);
+        self.c_call_sir_function(&program.funcs[0],
+                                 &c_func_args,
+                                 None);
         // for LLVM
         let entry_function = self.functions[&program.funcs[0].id];
         let inst = LLVMBuildCall(
@@ -1372,6 +1376,22 @@ impl CGenerator {
 
         self.functions.insert(func.id, function);
         Ok(())
+    }
+
+    pub unsafe fn c_call_sir_function(
+        &mut self,
+        func: &SirFunction,
+        args: &[String],
+        result: Option<String>,
+    ) {
+        let fun = &self.c_functions[&func.id];
+        let arg_line = self.intrinsics.c_args(args);
+        let res = match result {
+            Some(r) => r,
+            None => (*self.ccontext()).var_ids.next(),
+        };
+        (*self.ccontext()).body_code.add(format!(
+            "{} = {}({});", res, fun, arg_line));
     }
 
     /// Generates the Allocas for a function.

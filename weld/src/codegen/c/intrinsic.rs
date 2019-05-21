@@ -23,6 +23,9 @@ use super::llvm_exts::*;
 
 use super::CodeGenExt;
 use super::LLVM_VECTOR_WIDTH;
+use super::i32_c_type;
+use super::i64_c_type;
+use super::u64_c_type;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
@@ -75,19 +78,6 @@ impl CodeGenExt for Intrinsics {
         self.ccontext
     }
 }
-
-    // helper function
-    pub fn c_args(args: &[String]) -> String {
-        let mut arg_line = String::new();
-        let mut last_arg: &str = "";
-        for arg in args {
-            if !last_arg.is_empty() {
-                arg_line = format!("{}{}, ", arg_line, last_arg);
-            }
-            last_arg = arg;
-        }
-        format!("{}{}", arg_line, last_arg)
-    }
 
 impl Intrinsics {
     /// Returns value to function pointer mappings for non-builtin intrinsics.
@@ -193,22 +183,43 @@ impl Intrinsics {
         }
     }
 
+    // helper function
+    pub fn c_args(&mut self, args: &[String]) -> String {
+        let mut arg_line = String::new();
+        let mut last_arg: &str = "";
+        for arg in args {
+            if !last_arg.is_empty() {
+                arg_line = format!("{}{}, ", arg_line, last_arg);
+            }
+            last_arg = arg;
+        }
+        format!("{}{}", arg_line, last_arg)
+    }
+
     /// Convinience wrapper for calling any functions.
     pub unsafe fn c_call(
         &mut self,
         fun: &str,
         args: &[String],
-        result: Option<&str>,
+        result: Option<String>,
     ) {
-        let arg_line = c_args(args);
-        match result {
-            Some(r) =>
-                (*self.ccontext()).body_code.add(format!(
-                    "{} = {}({});", r, fun, arg_line)),
-            None =>
-                (*self.ccontext()).body_code.add(format!(
-                    "(void){}({});", fun, arg_line)),
-        }
+        let arg_line = self.c_args(args);
+        let res = match result {
+            Some(r) => r,
+            None => (*self.ccontext()).var_ids.next(),
+        };
+        (*self.ccontext()).body_code.add(format!(
+            "{} = {}({});", res, fun, arg_line));
+    }
+
+    pub unsafe fn c_call_void(
+        &mut self,
+        fun: &str,
+        args: &[String],
+    ) {
+        let arg_line = self.c_args(args);
+        (*self.ccontext()).body_code.add(format!(
+            "(void){}({});", fun, arg_line));
     }
 
     /// Convinience wrapper for calling the `weld_run_init` intrinsic.
@@ -248,7 +259,7 @@ impl Intrinsics {
     pub unsafe fn c_call_weld_run_get_result(
         &mut self,
         run: String,
-        name: Option<&str>,
+        name: Option<String>,
     ) {
         let args = [run];
         self.c_call("weld_runst_get_result", &args, name);
@@ -445,6 +456,31 @@ impl Intrinsics {
     unsafe fn populate_defaults(&mut self) {
         use super::llvm_exts::LLVMExtAttribute::*;
 
+        // Generate WeldRuntimeContext
+        (*self.ccontext()).prelude_code.add(format!("\
+typedef struct {{
+    /// Maps pointers to allocation size in bytes.
+    // allocations: FnvHashMap<Ptr, Layout>,
+    // ...void* to layout map...
+    /// An error code set for the context.
+    {i64} errno;        // WeldRuntimeErrno
+    /// A result pointer set by the runtime.
+    void* result;
+    /// The number of worker threads.
+    {i32} nworkers;
+    /// A memory limit.
+    {u64} memlimit;
+    /// Number of allocated bytes so far.
+    ///
+    /// This will always be equal to `allocations.values().sum()`.
+    {u64} allocated;
+}} WeldRuntimeContext;
+typedef WeldRuntimeContext* WeldRuntimeContextRef;",
+            i32=i32_c_type(self.ccontext()),
+            i64=i64_c_type(self.ccontext()),
+            u64=u64_c_type(self.ccontext()),
+        ));
+
         let int8p = LLVMPointerType(self.i8_type(), 0);
 
         // Defines the default intrinsics used by the Weld runtime.
@@ -477,6 +513,12 @@ impl Intrinsics {
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_get_result as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add("\
+void* weld_runst_get_result(WeldRuntimeContextRef run)
+{
+    return run->result;
+}");
+
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_set_result").unwrap();
