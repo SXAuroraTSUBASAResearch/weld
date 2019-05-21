@@ -184,35 +184,47 @@ impl Intrinsics {
     }
 
     // helper function
-    pub fn c_args(&mut self, args: &[String]) -> String {
-        let mut arg_line = String::new();
+    pub fn c_args(&mut self, args: &[&str]) -> String {
+        let mut args_line = String::new();
         let mut last_arg: &str = "";
         for arg in args {
             if !last_arg.is_empty() {
-                arg_line = format!("{}{}, ", arg_line, last_arg);
+                args_line = format!("{}{}, ", args_line, last_arg);
             }
             last_arg = arg;
         }
-        format!("{}{}", arg_line, last_arg)
+        format!("{}{}", args_line, last_arg)
+    }
+
+    pub fn c_args_string(&mut self, args: &[String]) -> String {
+        let mut args_line = String::new();
+        let mut last_arg: &str = "";
+        for arg in args {
+            if !last_arg.is_empty() {
+                args_line = format!("{}{}, ", args_line, last_arg);
+            }
+            last_arg = arg;
+        }
+        format!("{}{}", args_line, last_arg)
     }
 
     /// Convinience wrapper for calling any functions.
     pub unsafe fn c_call(
         &mut self,
         fun: &str,
-        args: &[String],
+        args: &[&str],
         ret_ty: &str,
         result: Option<String>,
     ) -> String {
-        let arg_line = self.c_args(args);
+        let args_line = self.c_args(args);
         if let Some(res) = result {
             (*self.ccontext()).body_code.add(format!(
-                "{} = {}({});", res, fun, arg_line));
+                "{} = {}({});", res, fun, args_line));
             res
         } else {
             let res = (*self.ccontext()).var_ids.next();
             (*self.ccontext()).body_code.add(format!(
-                "{} {} = {}({});", ret_ty, res, fun, arg_line));
+                "{} {} = {}({});", ret_ty, res, fun, args_line));
             res
         }
     }
@@ -220,11 +232,11 @@ impl Intrinsics {
     pub unsafe fn c_call_void(
         &mut self,
         fun: &str,
-        args: &[String],
+        args: &[&str],
     ) {
-        let arg_line = self.c_args(args);
+        let args_line = self.c_args(args);
         (*self.ccontext()).body_code.add(format!(
-            "(void){}({});", fun, arg_line));
+            "(void){}({});", fun, args_line));
     }
 
     /// Convinience wrapper for calling the `weld_run_init` intrinsic.
@@ -246,8 +258,8 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_init(
         &mut self,
-        nworkers: String,
-        memlimit: String,
+        nworkers: &str,
+        memlimit: &str,
         name: Option<String>,
     ) -> String {
         let args = [nworkers, memlimit];
@@ -273,7 +285,7 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_get_result(
         &mut self,
-        run: String,
+        run: &str,
         name: Option<String>,
     ) -> String {
         let args = [run];

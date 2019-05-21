@@ -1186,8 +1186,8 @@ impl CGenerator {
         // Generate codes for init_run block.
         // for C
         self.intrinsics.c_call_weld_run_init(
-            "in_args->nworkers".to_string(),
-            "in_args->memlimit".to_string(),
+            "in_args->nworkers",
+            "in_args->memlimit",
             Some("run".to_string()),
         );
         (*self.ccontext()).body_code.add("}");
@@ -1278,8 +1278,9 @@ impl CGenerator {
 
         // Run the Weld program.
         // for C
+        let args_line = self.intrinsics.c_args_string(&c_func_args);
         self.c_call_sir_function(&program.funcs[0],
-                                 &c_func_args,
+                                 &args_line,
                                  None)?;
         // for LLVM
         let entry_function = self.functions[&program.funcs[0].id];
@@ -1294,7 +1295,7 @@ impl CGenerator {
 
         // Get the results.
         // for C
-        let result = self.intrinsics.c_call_weld_run_get_result("run".to_string(), None);
+        let result = self.intrinsics.c_call_weld_run_get_result("run", None);
         let result_i64 = (*self.ccontext()).var_ids.next();
         (*self.ccontext()).body_code.add(format!("{i64} {result_i64} = ({i64}){result};", i64=self.i64_c_type(), result_i64=result_i64, result=result));
         // for LLVM
@@ -1391,21 +1392,20 @@ impl CGenerator {
     pub unsafe fn c_call_sir_function(
         &mut self,
         func: &SirFunction,
-        args: &[String],
+        args_line: &String,
         result: Option<String>,
     ) -> WeldResult<String> {
-        let arg_line = self.intrinsics.c_args(args);
         if let Some(res) = result {
         let fun = &self.c_functions[&func.id];
             (*self.ccontext()).body_code.add(format!(
-                "{} = {}({});", res, fun, arg_line));
+                "{} = {}({});", res, fun, args_line));
             Ok(res)
         } else {
             let res = (*self.ccontext()).var_ids.next();
             let ret_ty = self.c_type(&func.return_type)?.to_string();
         let fun = &self.c_functions[&func.id];
             (*self.ccontext()).body_code.add(format!(
-                "{} {} = {}({});", ret_ty, res, fun, arg_line));
+                "{} {} = {}({});", ret_ty, res, fun, args_line));
             Ok(res)
         }
     }
