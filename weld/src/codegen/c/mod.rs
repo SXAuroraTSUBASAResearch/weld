@@ -1165,8 +1165,8 @@ impl CGenerator {
 
         // Check whether we already have an existing run.
         // for C
-        (*self.ccontext()).body_code.add(format!("{handle} handle = ({handle})in_args->run;", handle=self.run_handle_c_type()));
-        (*self.ccontext()).body_code.add("if (handle == 0) {");
+        (*self.ccontext()).body_code.add(format!("{handle} run = ({handle})in_args->run;", handle=self.run_handle_c_type()));
+        (*self.ccontext()).body_code.add("if (run == 0) {");
         
         // for LLVM
         let run_pointer =
@@ -1185,7 +1185,7 @@ impl CGenerator {
 
         // Generate codes for init_run block.
         // for C
-        (*self.ccontext()).body_code.add("handle = weld_runst_init(in_args->nworkers, in_args->memlimit);");
+        (*self.ccontext()).body_code.add("run = weld_runst_init(in_args->nworkers, in_args->memlimit);");
         (*self.ccontext()).body_code.add("}");
         // for LLVM
         LLVMPositionBuilderAtEnd(builder, init_run_block);
@@ -1268,7 +1268,7 @@ impl CGenerator {
         }
         // Push the run handle.
         // for C
-        c_func_args.push("handle".to_string());
+        c_func_args.push("run".to_string());
         // for LLVM
         func_args.push(run);
 
@@ -1276,7 +1276,7 @@ impl CGenerator {
         // for C
         self.c_call_sir_function(&program.funcs[0],
                                  &c_func_args,
-                                 None);
+                                 None)?;
         // for LLVM
         let entry_function = self.functions[&program.funcs[0].id];
         let inst = LLVMBuildCall(
@@ -1290,7 +1290,9 @@ impl CGenerator {
 
         // Get the results.
         // for C
-        let result = self.intrinsics.c_call_weld_run_get_result("handle".to_string(), None);
+        let result = self.intrinsics.c_call_weld_run_get_result("run".to_string(), None);
+        let result_i64 = (*self.ccontext()).var_ids.next();
+        (*self.ccontext()).body_code.add(format!("{i64} {result_i64} = ({i64}){result};", i64=self.i64_c_type(), result_i64=result_i64, result=result));
         // for LLVM
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
         let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
@@ -1361,6 +1363,10 @@ impl CGenerator {
         // for C
         let function = format!("f{}", func.id);
         self.c_functions.insert(func.id, function);
+        // let mut arg_tys = self.argument_types(func)?;
+        // arg_tys.push(self.run_handle_type());
+        let ret_ty = self.c_type(&func.return_type)?;
+
         // for LLVM
         let mut arg_tys = self.argument_types(func)?;
         arg_tys.push(self.run_handle_type());
@@ -1383,15 +1389,21 @@ impl CGenerator {
         func: &SirFunction,
         args: &[String],
         result: Option<String>,
-    ) {
-        let fun = &self.c_functions[&func.id];
+    ) -> WeldResult<String> {
         let arg_line = self.intrinsics.c_args(args);
-        let res = match result {
-            Some(r) => r,
-            None => (*self.ccontext()).var_ids.next(),
-        };
-        (*self.ccontext()).body_code.add(format!(
-            "{} = {}({});", res, fun, arg_line));
+        if let Some(res) = result {
+        let fun = &self.c_functions[&func.id];
+            (*self.ccontext()).body_code.add(format!(
+                "{} = {}({});", res, fun, arg_line));
+            Ok(res)
+        } else {
+            let res = (*self.ccontext()).var_ids.next();
+            let ret_ty = self.c_type(&func.return_type)?.to_string();
+        let fun = &self.c_functions[&func.id];
+            (*self.ccontext()).body_code.add(format!(
+                "{} {} = {}({});", ret_ty, res, fun, arg_line));
+            Ok(res)
+        }
     }
 
     /// Generates the Allocas for a function.

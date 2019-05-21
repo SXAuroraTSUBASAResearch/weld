@@ -201,15 +201,20 @@ impl Intrinsics {
         &mut self,
         fun: &str,
         args: &[String],
+        ret_ty: &str,
         result: Option<String>,
-    ) {
+    ) -> String {
         let arg_line = self.c_args(args);
-        let res = match result {
-            Some(r) => r,
-            None => (*self.ccontext()).var_ids.next(),
-        };
-        (*self.ccontext()).body_code.add(format!(
-            "{} = {}({});", res, fun, arg_line));
+        if let Some(res) = result {
+            (*self.ccontext()).body_code.add(format!(
+                "{} = {}({});", res, fun, arg_line));
+            res
+        } else {
+            let res = (*self.ccontext()).var_ids.next();
+            (*self.ccontext()).body_code.add(format!(
+                "{} {} = {}({});", ret_ty, res, fun, arg_line));
+            res
+        }
     }
 
     pub unsafe fn c_call_void(
@@ -260,9 +265,9 @@ impl Intrinsics {
         &mut self,
         run: String,
         name: Option<String>,
-    ) {
+    ) -> String {
         let args = [run];
-        self.c_call("weld_runst_get_result", &args, name);
+        self.c_call("weld_runst_get_result", &args, "void*", name)
     }
 
     /// Convinience wrapper for calling the `weld_run_set_result` intrinsic.
