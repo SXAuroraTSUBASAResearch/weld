@@ -244,6 +244,16 @@ impl Intrinsics {
             name.unwrap_or(c_str!("")),
         )
     }
+    pub unsafe fn c_call_weld_run_init(
+        &mut self,
+        nworkers: String,
+        memlimit: String,
+        name: Option<String>,
+    ) -> String {
+        let args = [nworkers, memlimit];
+        let run_handle_type = self.run_handle_c_type().to_string();
+        self.c_call("weld_runst_init", &args, &run_handle_type, name)
+    }
 
     /// Convinience wrapper for calling the `weld_run_get_result` intrinsic.
     pub unsafe fn call_weld_run_get_result(
@@ -463,12 +473,54 @@ impl Intrinsics {
 
         // Generate WeldRuntimeContext
         (*self.ccontext()).prelude_code.add(format!("\
+typedef {i64} WeldRuntimeErrno;
+
+/// WeldRuntimeErrno need to be synced with weld/src/runtime/mod.rs
+/// Indicates success.
+///
+/// This will always be 0.
+#define Success                 0
+/// Invalid configuration.
+#define ConfigurationError      1
+/// Dynamic library load error.
+#define LoadLibraryError        2
+/// Weld compilation error.
+#define CompileError            3
+/// Array out-of-bounds error.
+#define ArrayOutOfBounds        4
+/// A Weld iterator was invalid.
+#define BadIteratorLength       5
+/// Mismatched Zip error.
+///
+/// This error is thrown if the vectors in a Zip have different lengths.
+#define MismatchedZipSize       6
+/// Out of memory error.
+///
+/// This error is thrown if the amount of memory allocated by the runtime exceeds the limit set
+/// by the configuration.
+#define OutOfMemory             7
+#define RunNotFound             8
+/// An unknown error.
+#define Unknown                 9
+/// A deserialization error.
+///
+/// This error occurs if a buffer being deserialized has an invalid length.
+#define DeserializationError    10
+/// A key was not found in a dictionary.
+#define KeyNotFoundError        11
+/// An assertion evaluated to `false`.
+#define AssertionError          12
+/// Maximum errno value.
+///
+/// All errors will have a value less than this value and greater than 0.
+#define ErrnoMax                13
+
 typedef struct {{
     /// Maps pointers to allocation size in bytes.
     // allocations: FnvHashMap<Ptr, Layout>,
     // ...void* to layout map...
     /// An error code set for the context.
-    {i64} errno;        // WeldRuntimeErrno
+    WeldRuntimeErrno errno;
     /// A result pointer set by the runtime.
     void* result;
     /// The number of worker threads.
@@ -502,6 +554,24 @@ typedef WeldRuntimeContext* WeldRuntimeContextRef;",
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_init as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add(format!("\
+{run_handle_type} weld_runst_init({i32} nworkers, {i64} memlimit)
+{{
+    WeldRunTimeContextRef run =
+        (WeldRuntimeContextRef)malloc(sizeof(WeldRuntimeContext));
+    assert(run != 0);
+    // run->allocations = FnvHashMap::default();
+    run->errno = Success;
+    run->result = 0;
+    run->nworkers = nworkers;
+    run->memlimit = memlimit;
+    run->allocated = 0;
+    return ({run_handle_type})run;
+}}",
+            run_handle_type=self.run_handle_c_type(),
+            i32=i32_c_type(self.ccontext()),
+            i64=i64_c_type(self.ccontext()),
+        ));
 
         let mut params = vec![self.run_handle_type()];
         let name = CString::new("weld_runst_get_result").unwrap();
@@ -523,7 +593,6 @@ void* weld_runst_get_result(WeldRuntimeContextRef run)
 {
     return run->result;
 }");
-
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_set_result").unwrap();

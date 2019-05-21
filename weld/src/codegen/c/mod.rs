@@ -1132,7 +1132,7 @@ impl CGenerator {
 
         // Declare run function.
         // for C
-        (*self.ccontext()).body_code.add(format!("i64 {}(i64 args) {{", self.conf.llvm.run_func_name));
+        (*self.ccontext()).body_code.add(format!("i64 {}(i64 args)\n{{", self.conf.llvm.run_func_name));
         // for LLVM
         let name = CString::new(self.conf.llvm.run_func_name.as_bytes()).unwrap();
         let func_ty = LLVMFunctionType(self.i64_type(), [self.i64_type()].as_mut_ptr(), 1, 0);
@@ -1185,7 +1185,11 @@ impl CGenerator {
 
         // Generate codes for init_run block.
         // for C
-        (*self.ccontext()).body_code.add("run = weld_runst_init(in_args->nworkers, in_args->memlimit);");
+        self.intrinsics.c_call_weld_run_init(
+            "in_args->nworkers".to_string(),
+            "in_args->memlimit".to_string(),
+            Some("run".to_string()),
+        );
         (*self.ccontext()).body_code.add("}");
         // for LLVM
         LLVMPositionBuilderAtEnd(builder, init_run_block);
