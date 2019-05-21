@@ -321,10 +321,12 @@ pub struct CContext {
     /// the name is declared.  For example, i16_type() outputs declaration of
     /// i16 and set the name to this map.
     basic_types: FnvHashMap<ScalarKind, String>,
+    simd_types: FnvHashMap<ScalarKind, String>,
 
     i1_defined: bool,
     input_arg_defined: bool,
     output_arg_defined: bool,
+    run_handle_defined: bool,
 
     /// A CodeBuilder and ID generator for prelude functions such as type
     /// and struct definitions.
@@ -354,6 +356,10 @@ pub struct CGenerator {
     ///
     /// The key maps the *element type* to the vector's type reference and methods on it.
     vectors: FnvHashMap<Type, vector::Vector>,
+    /// A map tracking generated vectors.
+    ///
+    /// The key maps the *element type* to the vector's type reference and methods on it.
+    c_vectors: FnvHashMap<Type, vector::Vector>,
     /// A map tracking generated mergers.
     ///
     /// The key maps the merger type to the merger's type reference and methods on it.
@@ -388,6 +394,8 @@ pub struct CGenerator {
     deserialize_fns: FnvHashMap<Type, LLVMValueRef>,
     /// Names of structs for readability.
     struct_names: FnvHashMap<Type, CString>,
+    /// Names of structs for readability.
+    c_struct_names: FnvHashMap<Type, String>,
     /// Counter for unique struct names.
     struct_index: u32,
 }
@@ -782,6 +790,15 @@ pub trait CodeGenExt {
         "void*"
     }
 
+    unsafe fn c_run_handle_type(&self) -> &str {
+        if !(*self.ccontext()).run_handle_defined {
+            (*self.ccontext()).prelude_code.add(
+                "typedef struct { char } RunHandle;");
+            (*self.ccontext()).run_handle_defined = true;
+        }
+        "RunHandle*"
+    }
+
     /// Booleans are represented as `i8`.
     ///
     /// For instructions that require `i1` (e.g, conditional branching or select), the caller
@@ -927,9 +944,11 @@ impl CGenerator {
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
         let ccontext_data = Box::new(CContext {
             basic_types: FnvHashMap::default(),
+            simd_types: FnvHashMap::default(),
             i1_defined: false,
             input_arg_defined: false,
             output_arg_defined: false,
+            run_handle_defined: false,
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
         });
@@ -958,6 +977,7 @@ impl CGenerator {
             target,
             functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
+            c_vectors: FnvHashMap::default(),
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
@@ -969,6 +989,7 @@ impl CGenerator {
             serialize_fns: FnvHashMap::default(),
             deserialize_fns: FnvHashMap::default(),
             struct_names: FnvHashMap::default(),
+            c_struct_names: FnvHashMap::default(),
             struct_index: 0,
             intrinsics,
         })
@@ -1030,17 +1051,19 @@ impl CGenerator {
         use crate::ast::Type::Struct;
 
         // Declare types
-        let _i64_name = self.i64_c_type();
-        let _i32_name = self.i32_c_type();
+        // for C
+        self.i64_c_type();
+        self.i32_c_type();
         let c_input_type = WeldInputArgs::c_type(self.ccontext);
         let c_output_type = WeldOutputArgs::c_type(self.ccontext);
-       // format!("void f{}_wrapper({}, i32 cur_tid) {{", func.id, serial_arg_types));
-        (*self.ccontext()).body_code.add(format!("i64 {}(i64 args) {{", self.conf.llvm.run_func_name));
-
-
+        // for LLVM
         let input_type = WeldInputArgs::llvm_type(self.context);
         let output_type = WeldOutputArgs::llvm_type(self.context);
 
+        // Declare run function
+        // for C
+        (*self.ccontext()).body_code.add(format!("i64 {}(i64 args) {{", self.conf.llvm.run_func_name));
+        // for LLVM
         let name = CString::new(self.conf.llvm.run_func_name.as_bytes()).unwrap();
         let func_ty = LLVMFunctionType(self.i64_type(), [self.i64_type()].as_mut_ptr(), 1, 0);
         let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
@@ -1057,6 +1080,10 @@ impl CGenerator {
         let init_run_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
         let get_arg_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
 
+        // Generate codes for entry block
+        // for C
+        (*self.ccontext()).body_code.add(format!("{}* in_args = ({}*)args;", c_input_type, c_input_type));
+        // for LLVM
         LLVMPositionBuilderAtEnd(builder, entry_block);
         let argument = LLVMGetParam(function, 0);
         let pointer = LLVMBuildIntToPtr(
@@ -1067,6 +1094,11 @@ impl CGenerator {
         );
 
         // Check whether we already have an existing run.
+        // for C
+        (*self.ccontext()).body_code.add(format!("{} handle = ({})in_args->run;", self.c_run_handle_type(), self.c_run_handle_type()));
+        (*self.ccontext()).body_code.add(format!("if (handle == 0) {{"));
+        
+        // for LLVM
         let run_pointer =
             LLVMBuildStructGEP(builder, pointer, WeldInputArgs::run_index(), c_str!(""));
         let run_pointer = self.load(builder, run_pointer)?;
@@ -1081,6 +1113,11 @@ impl CGenerator {
         );
         LLVMBuildCondBr(builder, null_check, init_run_block, get_arg_block);
 
+        // Generate codes for init_run block
+        // for C
+        (*self.ccontext()).body_code.add(format!("handle = weld_runst_init(in_args->nworkers, in_args->memlimit);"));
+        (*self.ccontext()).body_code.add(format!("}}"));
+        // for LLVM
         LLVMPositionBuilderAtEnd(builder, init_run_block);
         let nworkers_pointer = LLVMBuildStructGEP(
             builder,
@@ -1101,6 +1138,8 @@ impl CGenerator {
             .call_weld_run_init(builder, nworkers, memlimit, None);
         LLVMBuildBr(builder, get_arg_block);
 
+        // Generate codes for get_arg block
+        // for LLVM
         LLVMPositionBuilderAtEnd(builder, get_arg_block);
         let run = LLVMBuildPhi(builder, self.run_handle_type(), c_str!(""));
         let mut blocks = [entry_block, init_run_block];
@@ -1129,6 +1168,8 @@ impl CGenerator {
             LLVMPointerType(llvm_arg_ty, 0),
             c_str!("arg"),
         );
+        // for C
+        (*self.ccontext()).body_code.add(format!("{ty}* arg = ({ty}*)(in_args->input);", ty=self.c_type(arg_ty)?));
 
         // Function arguments are sorted by symbol name - arrange the inputs in the proper order.
         let mut params: Vec<(&Symbol, u32)> = program
@@ -1945,6 +1986,93 @@ impl CGenerator {
                     self.vectors.insert(elem_type.as_ref().clone(), vector);
                 }
                 self.vectors[elem_type].vector_ty
+            }
+            Function(_, _) | Unknown | Alias(_, _) => unreachable!(),
+        };
+        Ok(result)
+    }
+
+    /// Returns the C type for a Weld Type.
+    ///
+    /// This method may generate auxillary code before returning the type. For example, for complex
+    /// data structures, this function may generate a definition for the data structure first.
+    unsafe fn c_type(&mut self, ty: &Type) -> WeldResult<&str> {
+        use crate::ast::ScalarKind::*;
+        use crate::ast::Type::*;
+        let result = match *ty {
+            Builder(_, _) => {
+                use self::builder::BuilderExpressionGen;
+                self.builder_c_type(ty)?
+            }
+            Dict(ref key, ref value) => {
+                use self::eq::GenEq;
+                if !self.dictionaries.contains_key(ty) {
+                    let key_ty = self.llvm_type(key)?;
+                    let c_key_ty = self.c_type(key)?;
+                    let value_ty = self.llvm_type(value)?;
+                    let c_value_ty = self.c_type(value)?;
+                    let key_comparator = self.gen_eq_fn(key)?;
+                    let dict = dict::Dict::define(
+                        "dict",
+                        key_ty,
+                        key_comparator,
+                        value_ty,
+                        self.context,
+                        self.module,
+                        self.ccontext,
+                    );
+                    self.dictionaries.insert(ty.clone(), dict);
+                }
+                &self.dictionaries[ty].name
+            }
+            Scalar(kind) => match kind {
+                Bool => self.bool_c_type(),
+                I8 => self.i8_c_type(),
+                U8 => self.u8_c_type(),
+                I16 => self.i16_c_type(),
+                U16 => self.u16_c_type(),
+                I32 => self.i32_c_type(),
+                U32 => self.u32_c_type(),
+                I64 => self.i64_c_type(),
+                U64 => self.u64_c_type(),
+                F32 => self.f32_c_type(),
+                F64 => self.f64_c_type(),
+            },
+            Simd(kind) => {
+                if !(*self.ccontext()).simd_types.contains_key(&kind) {
+                    (*self.ccontext()).prelude_code.add(
+                        format!("// typedef ... simd_{};",
+                        self.c_type(&Scalar(kind))?));
+                    (*self.ccontext()).simd_types.insert(
+                        kind, format!("simd_{}", self.c_type(&Scalar(kind))?));
+                }
+                (*self.ccontext()).simd_types.get(&kind).unwrap()
+            }
+            Struct(ref elems) => {
+                if !self.c_struct_names.contains_key(ty) {
+                    let name = format!("s{}", self.struct_index);
+                    self.struct_index += 1;
+                    let mut def = CodeBuilder::new();
+                    def.add("typedef struct {");
+                    for (i, e) in elems.iter().enumerate() {
+                        def.add(format!("{} s{};", self.c_type(e)?, i));
+                    }
+                    def.add(format!("}} {};", name));
+                    (*self.ccontext()).prelude_code.add(def.result());
+                    self.c_struct_names.insert(ty.clone(), name);
+                }
+                self.c_struct_names.get(ty).unwrap()
+            }
+            Vector(ref elem_type) => {
+                // Vectors are a named type, so only generate the name once.
+                if !self.c_vectors.contains_key(elem_type) {
+                    let c_elem_type = self.c_type(elem_type)?;
+                    let llvm_elem_type = self.llvm_type(elem_type)?;
+                    let vector =
+                        vector::Vector::define("vec", llvm_elem_type, self.context, self.module, self.ccontext());
+                    self.c_vectors.insert(elem_type.as_ref().clone(), vector);
+                }
+                &self.c_vectors[elem_type].name
             }
             Function(_, _) | Unknown | Alias(_, _) => unreachable!(),
         };

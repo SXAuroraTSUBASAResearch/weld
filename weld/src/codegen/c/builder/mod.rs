@@ -77,6 +77,7 @@ pub trait BuilderExpressionGen {
     ) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
+    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<&str>;
 }
 
 /// Encapsulates the fields of a `NewBuilder` statement.
@@ -556,6 +557,62 @@ impl BuilderExpressionGen for CGenerator {
                 VecMerger(ref elem, _) => {
                     let vec_type = &Vector(elem.clone());
                     self.llvm_type(vec_type)
+                }
+            }
+        } else {
+            unreachable!()
+        }
+    }
+    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<&str> {
+        if let Builder(ref kind, _) = *builder {
+            match *kind {
+                Appender(ref elem_type) => {
+                    if !self.appenders.contains_key(kind) {
+                        let llvm_elem_type = self.llvm_type(elem_type)?;
+                        let appender = appender::Appender::define(
+                            "appender",
+                            llvm_elem_type,
+                            self.context,
+                            self.module,
+                            self.ccontext,
+                        );
+                        self.appenders.insert(kind.clone(), appender);
+                    }
+                    Ok(&self.appenders[kind].name)
+                }
+                DictMerger(ref key, ref value, _) => {
+                    let dict_type = &Dict(key.clone(), value.clone());
+                    self.c_type(dict_type)
+                }
+                GroupMerger(ref key, ref value) => {
+                    // GroupMerger is backed by dictionary, but the value type is a vector.
+                    let dict_type = &Dict(key.clone(), Box::new(Vector(value.clone())));
+                    self.c_type(dict_type)
+                }
+                Merger(ref elem_type, ref binop) => {
+                    if !self.mergers.contains_key(kind) {
+                        let scalar_kind = if let Scalar(ref kind) = *elem_type.as_ref() {
+                            *kind
+                        } else {
+                            unreachable!()
+                        };
+                        let llvm_elem_type = self.llvm_type(elem_type)?;
+                        let merger = merger::Merger::define(
+                            "merger",
+                            *binop,
+                            llvm_elem_type,
+                            scalar_kind,
+                            self.context,
+                            self.module,
+                            self.ccontext,
+                        );
+                        self.mergers.insert(kind.clone(), merger);
+                    }
+                    Ok(&self.mergers[kind].name)
+                }
+                VecMerger(ref elem, _) => {
+                    let vec_type = &Vector(elem.clone());
+                    self.c_type(vec_type)
                 }
             }
         } else {
