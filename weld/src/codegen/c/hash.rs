@@ -60,9 +60,15 @@ impl GenHash for CGenerator {
     ) -> WeldResult<LLVMValueRef> {
         if !self.hash_fns.contains_key(ty) {
             let llvm_ty = self.llvm_type(ty)?;
+            let c_ty = self.c_type(ty)?;
             let mut arg_tys = [LLVMPointerType(llvm_ty, 0), self.hash_type()];
+            let mut c_arg_tys = [
+                &format!("{}*", c_ty),
+                self.hash_c_type(),
+            ];
 
             let ret_ty = self.hash_type();
+            let c_ret_ty = self.hash_c_type();
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
             let prefix = CStr::from_ptr(c_prefix);
@@ -71,7 +77,7 @@ impl GenHash for CGenerator {
             // Free the allocated string.
             LLVMDisposeMessage(c_prefix);
 
-            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
 
             // Always inline calls that do not generate loops.
             if !ty.has_pointer() {

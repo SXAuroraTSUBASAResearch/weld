@@ -36,6 +36,7 @@ pub const DEFAULT_CAPACITY: i64 = 16;
 pub struct Appender {
     pub appender_ty: LLVMTypeRef,
     pub elem_ty: LLVMTypeRef,
+    pub c_elem_ty: String,
     pub name: String,
     context: LLVMContextRef,
     module: LLVMModuleRef,
@@ -90,6 +91,7 @@ impl Appender {
         Appender {
             appender_ty: appender,
             elem_ty,
+            c_elem_ty,
             name: c_name.into_string().unwrap(),
             context,
             module,
@@ -136,10 +138,12 @@ impl Appender {
     ) -> WeldResult<LLVMValueRef> {
         if self.new.is_none() {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
+            let mut c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
             let ret_ty = self.appender_ty;
+            let c_ret_ty = &self.name;
 
             let name = format!("{}.new", self.name);
-            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
 
             let capacity = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
@@ -182,13 +186,14 @@ impl Appender {
         vectorized: bool,
     ) -> WeldResult<LLVMValueRef> {
         // Number of elements merged in at once.
-        let (merge_ty, num_elements) = if vectorized {
+        let (merge_ty, c_merge_ty, num_elements) = if vectorized {
             (
                 LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH),
+                self.simd_c_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH),
                 LLVM_VECTOR_WIDTH,
             )
         } else {
-            (self.elem_ty, 1)
+            (self.elem_ty, &self.c_elem_ty as &str, 1)
         };
 
         let name = if vectorized {
@@ -202,8 +207,14 @@ impl Appender {
             merge_ty,
             self.run_handle_type(),
         ];
+        let mut c_arg_tys = [
+            self.pointer_c_type(&self.name),
+            &c_merge_ty,
+            self.run_handle_c_type(),
+        ];
         let ret_ty = LLVMVoidTypeInContext(self.context);
-        let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+        let c_ret_ty = self.void_c_type();
+        let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
 
@@ -324,15 +335,18 @@ impl Appender {
         &mut self,
         builder: LLVMBuilderRef,
         vector_ty: LLVMTypeRef,
+        c_vector_ty: &str,
         builder_arg: LLVMValueRef,
     ) -> WeldResult<LLVMValueRef> {
         // The vector type that the appender generates.
         use crate::codegen::c::vector;
         if self.result.is_none() {
             let mut arg_tys = [LLVMPointerType(self.appender_ty, 0)];
+            let mut c_arg_tys = [self.pointer_c_type(&self.name)];
             let ret_ty = vector_ty;
+            let c_ret_ty = c_vector_ty;
             let name = format!("{}.result", self.name);
-            let (function, builder, _) = self.define_function(ret_ty, &mut arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
 
             let appender = LLVMGetParam(function, 0);
 

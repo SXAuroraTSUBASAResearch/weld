@@ -223,7 +223,9 @@ impl SerHelper for CGenerator {
     unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
         if !self.serialize_fns.contains_key(ty) {
             let llvm_ty = self.llvm_type(ty)?;
+            let c_ty = self.c_type(ty)?;
             let buffer_ty = self.llvm_type(&SER_TY)?;
+            let c_buffer_ty = self.c_type(&SER_TY)?;
 
             // Buffer, position, value*, run
             let mut arg_tys = [
@@ -232,7 +234,14 @@ impl SerHelper for CGenerator {
                 LLVMPointerType(llvm_ty, 0),
                 self.run_handle_type(),
             ];
+            let mut c_arg_tys = [
+                c_buffer_ty,
+                self.i64_c_type(),
+                self.pointer_c_type(c_ty),
+                self.run_handle_c_type(),
+            ];
             let ret_ty = self.llvm_type(&SER_RET_TY)?;
+            let c_ret_ty = self.c_type(&SER_RET_TY)?;
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
             let prefix = CStr::from_ptr(c_prefix);
@@ -242,7 +251,7 @@ impl SerHelper for CGenerator {
             // Free the allocated string.
             LLVMDisposeMessage(c_prefix);
 
-            let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
 
             // TODO Set alwaysinline
 
@@ -581,6 +590,7 @@ impl DeHelper for CGenerator {
         if !self.deserialize_fns.contains_key(ty) {
             let llvm_ty = self.llvm_type(ty)?;
             let buffer_ty = self.llvm_type(&SER_TY)?;
+            let c_buffer_ty = self.c_type(&SER_TY)?;
             // Buffer, position, output*, run
             let mut arg_tys = [
                 buffer_ty,
@@ -588,8 +598,15 @@ impl DeHelper for CGenerator {
                 LLVMTypeOf(output),
                 self.run_handle_type(),
             ];
+            let mut c_arg_tys = [
+                &c_buffer_ty,
+                self.i64_c_type(),
+                &format!("typeof(output)  /* FIXME */"),
+                self.run_handle_c_type(),
+            ];
             // Return the position.
             let ret_ty = self.i64_type();
+            let c_ret_ty = self.i64_c_type();
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
             let prefix = CStr::from_ptr(c_prefix);
@@ -599,7 +616,7 @@ impl DeHelper for CGenerator {
             // Free the allocated string.
             LLVMDisposeMessage(c_prefix);
 
-            let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
 
             // TODO Set alwaysinline
 

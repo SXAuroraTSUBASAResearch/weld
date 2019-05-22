@@ -416,6 +416,14 @@ unsafe fn void_pointer_c_type(_ccontext: CContextRef) -> &'static str {
     "void*"
 }
 
+unsafe fn pointer_c_type(_ccontext: CContextRef, ty: &str) -> &'static str {
+    &format!("{}*", ty)
+}
+
+unsafe fn simd_c_type(_ccontext: CContextRef, ty: &str, size: u32) -> &'static str {
+    &format!("simd_{}_{}", ty, size)
+}
+
 unsafe fn run_handle_c_type(ccontext: CContextRef) -> &'static str {
     if !(*ccontext).run_handle_defined {
         (*ccontext).prelude_code.add(
@@ -613,6 +621,9 @@ pub trait CodeGenExt {
     unsafe fn hash_type(&self) -> LLVMTypeRef {
         self.i32_type()
     }
+    unsafe fn hash_c_type(&self) -> &str {
+        self.i32_c_type()
+    }
 
     /// Returns the type of the key comparator over opaque pointers.
     unsafe fn opaque_cmp_type(&self) -> LLVMTypeRef {
@@ -631,28 +642,62 @@ pub trait CodeGenExt {
     /// Returns a reference to the function, a builder used to build the function body, and the
     /// entry basic block. This method uses the default private linkage type, meaning functions
     /// generated using this method cannot be passed or called outside of the module.
-    unsafe fn define_function<T: Into<Vec<u8>>>(
+    unsafe fn define_function<T: AsRef<str>>(
         &mut self,
         ret_ty: LLVMTypeRef,
+        c_ret_ty: &str,
         arg_tys: &mut [LLVMTypeRef],
+        c_arg_tys: &mut [&str],
         name: T,
-    ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef) {
-        self.define_function_with_visibility(ret_ty, arg_tys, LLVMLinkage::LLVMPrivateLinkage, name)
+    ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef, CodeBuilder) {
+        self.define_function_with_visibility(
+            ret_ty,
+            c_ret_ty,
+            arg_tys,
+            c_arg_tys,
+            LLVMLinkage::LLVMPrivateLinkage,
+            name,
+        )
     }
 
     /// Generates code to define a function with the given return type and argument type.
     ///
     /// Returns a reference to the function, a builder used to build the function body, and the
     /// entry basic block.
-    unsafe fn define_function_with_visibility<T: Into<Vec<u8>>>(
+    unsafe fn define_function_with_visibility<T: AsRef<str>>(
         &mut self,
         ret_ty: LLVMTypeRef,
+        c_ret_ty: &str,
         arg_tys: &mut [LLVMTypeRef],
+        c_arg_tys: &mut [&str],
         visibility: LLVMLinkage,
         name: T,
-    ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef) {
+    ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef, CodeBuilder) {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
-        let name = CString::new(name).unwrap();
+        // for C
+        let code = CodeBuilder::new();
+        code.add(format!(
+            "{ret_ty} {fun}({args})",
+            ret_ty=c_ret_ty,
+            fun=name.as_ref(),
+            args="test",
+        ));
+        code.add("{");
+
+        /*
+        let mut arg_tys = self.c_argument_types(func)?;
+        arg_tys.push(self.run_handle_c_type());
+        let args_line = self.c_define_args(&arg_tys);
+        let ret_ty = self.c_type(&func.return_type)?;
+        (*self.ccontext()).body_code.add(format!("{ret_ty} {fun}({args})",
+            ret_ty=ret_ty,
+            fun=name.as_ref(),
+            args=args_line,
+        ));
+        (*self.ccontext()).body_code.add("{");
+        */
+        // for LLVM
+        let name = CString::new(name.as_ref()).unwrap();
         let function = LLVMAddFunction(self.module(), name.as_ptr(), func_ty);
         // Add the default attributes to all functions.
         llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
@@ -661,7 +706,7 @@ pub trait CodeGenExt {
         let block = LLVMAppendBasicBlockInContext(self.context(), function, c_str!(""));
         LLVMPositionBuilderAtEnd(builder, block);
         LLVMSetLinkage(function, visibility);
-        (function, builder, block)
+        (function, builder, block, code)
     }
 
     /// Converts a `LiteralKind` into a constant LLVM scalar literal value.
@@ -866,6 +911,14 @@ pub trait CodeGenExt {
 
     unsafe fn void_pointer_c_type(&self) -> &str {
         void_pointer_c_type(self.ccontext())
+    }
+
+    unsafe fn pointer_c_type(&self, ty: &str) -> &str {
+        pointer_c_type(self.ccontext(), ty)
+    }
+
+    unsafe fn simd_c_type(&self, ty: &str, size: u32) -> &str {
+        simd_c_type(self.ccontext(), ty, size)
     }
 
     unsafe fn run_handle_c_type(&self) -> &str {
@@ -1282,7 +1335,7 @@ impl CGenerator {
 
         // Run the Weld program.
         // for C
-        let args_line = self.intrinsics.c_args_string(&c_func_args);
+        let args_line = self.c_call_args(&c_func_args);
         self.c_call_sir_function(&program.funcs[0],
                                  &args_line,
                                  None)?;
@@ -1386,12 +1439,36 @@ impl CGenerator {
         }
         Ok(types)
     }
-    unsafe fn c_arguments(&mut self, func: &SirFunction) -> WeldResult<Vec<String>> {
+    unsafe fn c_argument_types(&mut self, func: &SirFunction) -> WeldResult<Vec<&str>> {
         let mut types = vec![];
-        for (i, (_, ty)) in func.params.iter().enumerate() {
-            types.push(format!("{} p{}", self.c_type(ty)?, i));
+        for (_, ty) in func.params.iter() {
+            types.push(self.c_type(ty)?);
         }
         Ok(types)
+    }
+
+    /// Helper functions to treate arguments.
+    pub fn c_call_args(&mut self, args: &[String]) -> String {
+        let mut args_line = String::new();
+        let mut last_arg: &str = "";
+        for arg in args {
+            if !last_arg.is_empty() {
+                args_line = format!("{}{}, ", args_line, last_arg);
+            }
+            last_arg = arg;
+        }
+        format!("{}{}", args_line, last_arg)
+    }
+    pub fn c_define_args(&mut self, arg_tys: &[&str]) -> String {
+        let mut args_line = String::new();
+        let mut last_arg: &str = "";
+        for (i, arg) in arg_tys.iter().enumerate() {
+            if !last_arg.is_empty() {
+                args_line = format!("{}{} p{}, ", args_line, last_arg, i);
+            }
+            last_arg = arg;
+        }
+        format!("{}{}", args_line, last_arg)
     }
 
     /// Declare a function in the SIR module and track its reference.
@@ -1513,9 +1590,9 @@ impl CGenerator {
         func: &SirFunction,
     ) -> WeldResult<()> {
         // for C
-        let mut arg_tys = self.c_arguments(func)?;
-        arg_tys.push(format!("{} {}", self.run_handle_c_type(), "run"));
-        let args_line = self.intrinsics.c_args_string(&arg_tys);
+        let mut arg_tys = self.c_argument_types(func)?;
+        arg_tys.push(self.run_handle_c_type());
+        let args_line = self.c_define_args(&arg_tys);
         let ret_ty = self.c_type(&func.return_type)?.to_string();
         let function = &self.c_functions[&func.id];
         (*self.ccontext()).body_code.add(format!("{ret_ty} {fun}({args})",
@@ -1523,7 +1600,7 @@ impl CGenerator {
             fun=function,
             args=args_line,
         ));
-        (*self.ccontext()).body_code.add("{\n");
+        (*self.ccontext()).body_code.add("{");
         // for LLVM
         let function = self.functions[&func.id];
         // + 1 to account for the run handle.
@@ -1569,7 +1646,7 @@ impl CGenerator {
         }
         // Write the function defined in C into the program.
         (*self.ccontext()).body_code.add(context.body.result());
-        (*self.ccontext()).body_code.add("}\n");
+        (*self.ccontext()).body_code.add("}");
         Ok(())
     }
 
@@ -1713,10 +1790,27 @@ impl CGenerator {
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(ref elem_type) = *child_type {
                     let methods = self.vectors.get_mut(elem_type).unwrap();
+                    // for C
+                    context.body.add(format!(
+                        "{} = {}({});",
+                        output,
+                        "test",
+//                        methods.gen_c_size(context.builder, child_value)?,
+                        child,
+                    ));
+                    // for LLVM
                     let result = methods.gen_size(context.builder, child_value)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
                     Ok(())
                 } else if let Dict(_, _) = *child_type {
+                    // for C
+                    context.body.add(format!(
+                        "{} = {}({});",
+                        output,
+                        "len",
+                        child,
+                    ));
+                    // for LLVM
                     let pointer = {
                         let methods = self.dictionaries.get_mut(child_type).unwrap();
                         methods.gen_size(context.builder, child_value)?
@@ -2132,13 +2226,17 @@ impl CGenerator {
                 use self::eq::GenEq;
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
+                    let c_key_ty = self.c_type(key)?;
                     let value_ty = self.llvm_type(value)?;
+                    let c_value_ty = self.c_type(value)?;
                     let key_comparator = self.gen_eq_fn(key)?;
                     let dict = dict::Dict::define(
                         "dict",
                         key_ty,
+                        c_key_ty,
                         key_comparator,
                         value_ty,
+                        c_value_ty,
                         self.context,
                         self.module,
                         self.ccontext,
@@ -2220,15 +2318,17 @@ impl CGenerator {
                 use self::eq::GenEq;
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
-                    // let c_key_ty = self.c_type(key)?;
+                    let c_key_ty = self.c_type(key)?;
                     let value_ty = self.llvm_type(value)?;
-                    // let c_value_ty = self.c_type(value)?;
+                    let c_value_ty = self.c_type(value)?;
                     let key_comparator = self.gen_eq_fn(key)?;
                     let dict = dict::Dict::define(
                         "dict",
                         key_ty,
+                        c_key_ty,
                         key_comparator,
                         value_ty,
+                        c_value_ty,
                         self.context,
                         self.module,
                         self.ccontext,
@@ -2300,7 +2400,7 @@ impl CGenerator {
 
     fn gen_c_code(&self) -> String {
         unsafe {
-        format!("// PRELUDE:\n{}\n\n// BODY:\n{}\n",
+        format!("// PRELUDE:\n{}\n\n// BODY:\n{}",
                 (*self.ccontext()).prelude_code.result(),
                 (*self.ccontext()).body_code.result())
         }

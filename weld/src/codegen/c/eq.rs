@@ -68,9 +68,14 @@ impl GenEq for CGenerator {
         }
 
         let llvm_ty = self.llvm_type(ty)?;
+        let c_ty = self.c_type(ty)?;
         // XXX Do we need the run handle?
         let mut arg_tys = [LLVMPointerType(llvm_ty, 0), LLVMPointerType(llvm_ty, 0)];
+        let mut c_arg_tys = [
+            self.pointer_c_type(c_ty), self.pointer_c_type(c_ty)
+        ];
         let ret_ty = self.i1_type();
+        let c_ret_ty = self.i1_c_type();
 
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);
@@ -79,7 +84,7 @@ impl GenEq for CGenerator {
         // Free the allocated string.
         LLVMDisposeMessage(c_prefix);
 
-        let (function, builder, entry_block) = self.define_function(ret_ty, &mut arg_tys, name);
+        let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
         LLVMExtAddAttrsOnParameter(
@@ -272,7 +277,9 @@ impl GenEq for CGenerator {
 
         let llvm_ty = self.llvm_type(ty)?;
         let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
+        let mut c_arg_tys = [self.void_pointer_c_type(), self.void_pointer_c_type()];
         let ret_ty = self.i32_type();
+        let c_ret_ty = self.i32_c_type();
 
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);
@@ -282,9 +289,11 @@ impl GenEq for CGenerator {
         // Free the allocated string.
         LLVMDisposeMessage(c_prefix);
 
-        let (function, builder, _) = self.define_function_with_visibility(
+        let (function, builder, _, _) = self.define_function_with_visibility(
             ret_ty,
+            c_ret_ty,
             &mut arg_tys,
+            &mut c_arg_tys,
             LLVMLinkage::LLVMExternalLinkage,
             name,
         );

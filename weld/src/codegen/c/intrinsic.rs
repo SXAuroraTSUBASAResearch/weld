@@ -193,18 +193,6 @@ impl Intrinsics {
         format!("{}{}", args_line, last_arg)
     }
 
-    pub fn c_args_string(&mut self, args: &[String]) -> String {
-        let mut args_line = String::new();
-        let mut last_arg: &str = "";
-        for arg in args {
-            if !last_arg.is_empty() {
-                args_line = format!("{}{}, ", args_line, last_arg);
-            }
-            last_arg = arg;
-        }
-        format!("{}{}", args_line, last_arg)
-    }
-
     /// Convinience wrapper for calling any functions.
     pub unsafe fn c_call(
         &mut self,
