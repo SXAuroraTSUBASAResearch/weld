@@ -62,6 +62,7 @@ impl Appender {
     pub unsafe fn define<T: AsRef<str>>(
         name: T,
         elem_ty: LLVMTypeRef,
+        c_elem_ty: String,
         context: LLVMContextRef,
         module: LLVMModuleRef,
         ccontext: CContextRef,

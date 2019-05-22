@@ -458,10 +458,10 @@ pub struct CContext {
     output_arg_defined: bool,
     run_handle_defined: bool,
 
+    /// A ID generator for prelude functions and an entry function.
     var_ids: IdGenerator,
 
-    /// A CodeBuilder and ID generator for prelude functions such as type
-    /// and struct definitions.
+    /// A CodeBuilder for prelude functions such as type and struct definitions.
     prelude_code: CodeBuilder,
 
     /// A CodeBuilder for body functions in the module.
@@ -490,10 +490,6 @@ pub struct CGenerator {
     ///
     /// The key maps the *element type* to the vector's type reference and methods on it.
     vectors: FnvHashMap<Type, vector::Vector>,
-    /// A map tracking generated vectors.
-    ///
-    /// The key maps the *element type* to the vector's type reference and methods on it.
-    c_vectors: FnvHashMap<Type, vector::Vector>,
     /// Counter for unique vector names.
     vector_index: u32,
     /// A map tracking generated mergers.
@@ -504,6 +500,8 @@ pub struct CGenerator {
     ///
     /// The key maps the appender type to the appender's type reference and methods on it.
     appenders: FnvHashMap<BuilderKind, appender::Appender>,
+    /// Counter for unique appender names.
+    appender_index: u32,
     /// A map tracking generated dictionaries.
     ///
     /// The key maps the dictionary's `Dict` type to the type reference and methods on it.
@@ -1054,10 +1052,10 @@ impl CGenerator {
             functions: FnvHashMap::default(),
             c_functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
-            c_vectors: FnvHashMap::default(),
             vector_index: 0,
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
+            appender_index: 0,
             dictionaries: FnvHashMap::default(),
             strings: FnvHashMap::default(),
             eq_fns: FnvHashMap::default(),
@@ -1454,6 +1452,11 @@ impl CGenerator {
         // Add the function parameters, which are stored in alloca'd variables. The
         // function parameters are always enumerated alphabetically sorted by symbol name.
         for (symbol, ty) in context.sir_function.params.iter() {
+            // for C
+            context.body.add(format!("{ty} {name};",
+                             ty=self.c_type(ty)?,
+                             name=symbol));
+            // for LLVM
             let name = CString::new(symbol.to_string()).unwrap();
             let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr());
             context.symbols.insert(symbol.clone(), value);
@@ -1461,6 +1464,11 @@ impl CGenerator {
 
         // alloca the local variables.
         for (symbol, ty) in context.sir_function.locals.iter() {
+            // for C
+            context.body.add(format!("{ty} {name};",
+                             ty=self.c_type(ty)?,
+                             name=symbol));
+            // for LLVM
             let name = CString::new(symbol.to_string()).unwrap();
             let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr());
             context.symbols.insert(symbol.clone(), value);
@@ -1513,7 +1521,6 @@ impl CGenerator {
             args=args_line,
         ));
         (*self.ccontext()).body_code.add("{\n");
-        (*self.ccontext()).body_code.add("}\n");
         // for LLVM
         let function = self.functions[&func.id];
         // + 1 to account for the run handle.
@@ -1545,6 +1552,9 @@ impl CGenerator {
             }
             self.gen_terminator(context, &bb, None)?;
         }
+        // Write the function defined in C into the program.
+        (*self.ccontext()).body_code.add(context.body.result());
+        (*self.ccontext()).body_code.add("}\n");
         Ok(())
     }
 
@@ -2157,9 +2167,12 @@ impl CGenerator {
             Vector(ref elem_type) => {
                 // Vectors are a named type, so only generate the name once.
                 if !self.vectors.contains_key(elem_type) {
+                    let name = format!("vec{}", self.vector_index);
+                    self.vector_index += 1;
+                    let c_elem_type = self.c_type(elem_type)?.to_string();
                     let llvm_elem_type = self.llvm_type(elem_type)?;
                     let vector =
-                        vector::Vector::define("vec", llvm_elem_type, self.context, self.module, self.ccontext());
+                        vector::Vector::define(name, llvm_elem_type, c_elem_type, self.context, self.module, self.ccontext());
                     self.vectors.insert(elem_type.as_ref().clone(), vector);
                 }
                 self.vectors[elem_type].vector_ty
@@ -2185,9 +2198,9 @@ impl CGenerator {
                 use self::eq::GenEq;
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
-                    let c_key_ty = self.c_type(key)?;
+                    // let c_key_ty = self.c_type(key)?;
                     let value_ty = self.llvm_type(value)?;
-                    let c_value_ty = self.c_type(value)?;
+                    // let c_value_ty = self.c_type(value)?;
                     let key_comparator = self.gen_eq_fn(key)?;
                     let dict = dict::Dict::define(
                         "dict",
@@ -2242,24 +2255,16 @@ impl CGenerator {
             }
             Vector(ref elem_type) => {
                 // Vectors are a named type, so only generate the name once.
-                if !self.c_vectors.contains_key(elem_type) {
-                    // for C
-                    let name = format!("v{}", self.vector_index);
+                if !self.vectors.contains_key(elem_type) {
+                    let name = format!("vec{}", self.vector_index);
                     self.vector_index += 1;
-                    let c_elem_type = self.c_type(elem_type)?;
-                    let mut def = CodeBuilder::new();
-                    def.add("typedef struct {");
-                    def.add(format!("{elem_ty}* data;", elem_ty=c_elem_type));
-                    def.add(format!("{u64} length;", u64=self.u64_c_type()));
-                    def.add(format!("}} {};", name));
-                    (*self.ccontext()).prelude_code.add(def.result());
-                    // for LLVM and C
+                    let c_elem_type = self.c_type(elem_type)?.to_string();
                     let llvm_elem_type = self.llvm_type(elem_type)?;
                     let vector =
-                        vector::Vector::define(name, llvm_elem_type, self.context, self.module, self.ccontext());
-                    self.c_vectors.insert(elem_type.as_ref().clone(), vector);
+                        vector::Vector::define(name, llvm_elem_type, c_elem_type, self.context, self.module, self.ccontext());
+                    self.vectors.insert(elem_type.as_ref().clone(), vector);
                 }
-                &self.c_vectors[elem_type].name
+                &self.vectors[elem_type].name
             }
             Function(_, _) | Unknown | Alias(_, _) => unreachable!(),
         };
@@ -2313,6 +2318,11 @@ pub struct FunctionContext<'a> {
     blocks: FnvHashMap<BasicBlockId, LLVMBasicBlockRef>,
     /// The LLVM builder, which marks where to insert new code.
     builder: LLVMBuilderRef,
+
+    /// A ID generator for each function.
+    var_ids: IdGenerator,
+    /// A CodeBuilder for each function.
+    body: CodeBuilder,
 }
 
 impl<'a> FunctionContext<'a> {
@@ -2329,6 +2339,8 @@ impl<'a> FunctionContext<'a> {
             builder: unsafe { LLVMCreateBuilderInContext(llvm_context) },
             symbols: FnvHashMap::default(),
             blocks: FnvHashMap::default(),
+            var_ids: IdGenerator::new("t"),
+            body: CodeBuilder::new(),
         }
     }
 

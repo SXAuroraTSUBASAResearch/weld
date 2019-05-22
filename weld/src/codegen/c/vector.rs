@@ -25,8 +25,10 @@ use super::intrinsic::Intrinsics;
 use super::CodeGenExt;
 use super::CGenerator;
 use super::LLVM_VECTOR_WIDTH;
+use super::u64_c_type;
 
 use crate::codegen::c::CContextRef;
+use code_builder::CodeBuilder;
 
 /// Index of the pointer into the vector data structure.
 pub const POINTER_INDEX: u32 = 0;
@@ -212,10 +214,19 @@ impl Vector {
     pub unsafe fn define<T: AsRef<str>>(
         name: T,
         elem_ty: LLVMTypeRef,
+        c_elem_ty: String,
         context: LLVMContextRef,
         module: LLVMModuleRef,
         ccontext: CContextRef,
     ) -> Vector {
+        // for C
+        let mut def = CodeBuilder::new();
+        def.add("typedef struct {");
+        def.add(format!("{elem_ty}* data;", elem_ty=c_elem_ty));
+        def.add(format!("{u64} size;", u64=u64_c_type(ccontext)));
+        def.add(format!("}} {};", name.as_ref()));
+        (*ccontext).prelude_code.add(def.result());
+        // for LLVM
         let c_name = CString::new(name.as_ref()).unwrap();
         let mut layout = [LLVMPointerType(elem_ty, 0), LLVMInt64TypeInContext(context)];
         let vector = LLVMStructCreateNamed(context, c_name.as_ptr());

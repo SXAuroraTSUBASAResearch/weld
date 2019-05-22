@@ -512,10 +512,12 @@ impl BuilderExpressionGen for CGenerator {
             match *kind {
                 Appender(ref elem_type) => {
                     if !self.appenders.contains_key(kind) {
+                        let c_elem_type = self.c_type(elem_type)?.to_string();
                         let llvm_elem_type = self.llvm_type(elem_type)?;
                         let appender = appender::Appender::define(
                             "appender",
                             llvm_elem_type,
+                            c_elem_type,
                             self.context,
                             self.module,
                             self.ccontext,
@@ -568,10 +570,14 @@ impl BuilderExpressionGen for CGenerator {
             match *kind {
                 Appender(ref elem_type) => {
                     if !self.appenders.contains_key(kind) {
+                        let name = format!("appender{}", self.appender_index);
+                        self.appender_index += 1;
+                        let c_elem_type = self.c_type(elem_type)?.to_string();
                         let llvm_elem_type = self.llvm_type(elem_type)?;
                         let appender = appender::Appender::define(
-                            "appender",
+                            name,
                             llvm_elem_type,
+                            c_elem_type,
                             self.context,
                             self.module,
                             self.ccontext,
