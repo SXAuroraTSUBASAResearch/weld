@@ -1388,8 +1388,8 @@ impl CGenerator {
     }
     unsafe fn c_arguments(&mut self, func: &SirFunction) -> WeldResult<Vec<String>> {
         let mut types = vec![];
-        for (sy, ty) in func.params.iter() {
-            types.push(format!("{} {}", self.c_type(ty)?, sy.name()));
+        for (i, (_, ty)) in func.params.iter().enumerate() {
+            types.push(format!("{} p{}", self.c_type(ty)?, i));
         }
         Ok(types)
     }
@@ -1480,6 +1480,9 @@ impl CGenerator {
     unsafe fn gen_store_parameters(&mut self, context: &mut FunctionContext<'_>) -> WeldResult<()> {
         // Store the parameter values in the alloca'd symbols.
         for (i, (symbol, _)) in context.sir_function.params.iter().enumerate() {
+            // for C
+            context.body.add(format!("{} = p{};", symbol, i));
+            // for LLVM
             let pointer = context.get_value(symbol)?;
             let value = LLVMGetParam(context.llvm_function, i as u32);
             LLVMBuildStore(context.builder, value, pointer);
@@ -1541,11 +1544,23 @@ impl CGenerator {
         self.gen_basic_block_defs(context)?;
 
         // Jump from locals to the first basic block.
+        // for C
+        context.body.add(format!(
+            "goto {};",
+            context.get_c_block(func.blocks[0].id),
+        ));
+        // for LLVM
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
         LLVMBuildBr(context.builder, context.get_block(func.blocks[0].id)?);
 
         // Generate code for the basic blocks in order.
         for bb in func.blocks.iter() {
+            // for C
+            context.body.add(format!(
+                "{}:",
+                context.get_c_block(func.blocks[0].id),
+            ));
+            // for LLVM
             LLVMPositionBuilderAtEnd(context.builder, context.get_block(bb.id)?);
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement)?;
@@ -1583,6 +1598,13 @@ impl CGenerator {
 
         match statement.kind {
             Assign(ref value) => {
+                // for C
+                context.body.add(format!(
+                    "{} = {};",
+                    output,
+                    value,
+                ));
+                // for LLVM
                 let loaded = self.load(context.builder, context.get_value(value)?)?;
                 LLVMBuildStore(context.builder, loaded, context.get_value(output)?);
                 Ok(())
@@ -2357,6 +2379,9 @@ impl<'a> FunctionContext<'a> {
             .get(&id)
             .cloned()
             .ok_or_else(|| WeldCompileError::new("Undefined basic block in function codegen"))
+    }
+    pub fn get_c_block(&self, id: BasicBlockId) -> String {
+        format!("b{}", id)
     }
 
     /// Get the handle to the run.
