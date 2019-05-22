@@ -140,7 +140,7 @@ impl Appender {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
             let mut c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
             let ret_ty = self.appender_ty;
-            let c_ret_ty = &self.name;
+            let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.new", self.name);
             let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
@@ -193,7 +193,7 @@ impl Appender {
                 LLVM_VECTOR_WIDTH,
             )
         } else {
-            (self.elem_ty, &self.c_elem_ty as &str, 1)
+            (self.elem_ty, self.c_elem_ty.clone(), 1)
         };
 
         let name = if vectorized {
@@ -208,7 +208,7 @@ impl Appender {
             self.run_handle_type(),
         ];
         let mut c_arg_tys = [
-            self.pointer_c_type(&self.name),
+            &self.pointer_c_type(&self.name),
             &c_merge_ty,
             self.run_handle_c_type(),
         ];
@@ -342,7 +342,7 @@ impl Appender {
         use crate::codegen::c::vector;
         if self.result.is_none() {
             let mut arg_tys = [LLVMPointerType(self.appender_ty, 0)];
-            let mut c_arg_tys = [self.pointer_c_type(&self.name)];
+            let mut c_arg_tys = [&self.pointer_c_type(&self.name) as &str];
             let ret_ty = vector_ty;
             let c_ret_ty = c_vector_ty;
             let name = format!("{}.result", self.name);

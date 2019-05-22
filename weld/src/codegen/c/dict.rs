@@ -487,7 +487,7 @@ impl Dict {
     ) -> LLVMValueRef {
         if self.resize.is_none() {
             let mut arg_tys = [self.dict_ty, self.run_handle_type()];
-            let mut c_arg_tys = [&self.name, self.run_handle_c_type()];
+            let mut c_arg_tys = [&self.name.clone(), self.run_handle_c_type()];
             let ret_ty = self.i1_type();
             let c_ret_ty = self.i1_c_type();
             let name = format!("{}.resize", self.name);
@@ -772,13 +772,13 @@ impl Dict {
                 LLVMPointerType(self.slot_ty.key_ty, 0),
             ];
             let mut c_arg_tys = [
-                self.pointer_c_type(&self.slot_ty.c_slot_ty),
+                &self.pointer_c_type(&self.slot_ty.c_slot_ty),
                 self.i64_c_type(),
                 self.i32_c_type(),
-                self.pointer_c_type(&self.slot_ty.c_key_ty),
+                &self.pointer_c_type(&self.slot_ty.c_key_ty),
             ];
             let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
-            let c_ret_ty = self.pointer_c_type(&self.slot_ty.c_slot_ty);
+            let c_ret_ty = &self.pointer_c_type(&self.slot_ty.c_slot_ty);
             let name = format!("{}.slot_for_key", self.name);
 
             let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
@@ -838,7 +838,7 @@ impl Dict {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
             let mut c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
             let ret_ty = self.dict_ty;
-            let c_ret_ty = &self.name;
+            let c_ret_ty = &self.name.clone();
             let name = format!("{}.new", self.name);
 
             let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
@@ -912,10 +912,10 @@ impl Dict {
                 self.run_handle_type(),
             ];
             let mut c_arg_tys = [
-                &self.name,
-                self.pointer_c_type(&self.slot_ty.c_key_ty),
+                &self.name.clone(),
+                &self.pointer_c_type(&self.slot_ty.c_key_ty),
                 self.hash_c_type(),
-                &self.slot_ty.c_val_ty,
+                &self.slot_ty.c_val_ty.clone(),
                 self.run_handle_c_type(),
             ];
 
@@ -949,7 +949,7 @@ impl Dict {
             // return_slot = phi [ slot, entry ] [ upsert_slot, upsert ]
 
             let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
-            let c_ret_ty = self.pointer_c_type(&self.slot_ty.c_slot_ty);
+            let c_ret_ty = &self.pointer_c_type(&self.slot_ty.c_slot_ty);
 
             let name = format!("{}.upsert", self.name);
             let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
@@ -1070,12 +1070,12 @@ impl Dict {
                 self.hash_type(),
             ];
             let mut c_arg_tys = [
-                &self.name,
-                self.pointer_c_type(&self.slot_ty.c_slot_ty),
+                &self.name.clone(),
+                &self.pointer_c_type(&self.slot_ty.c_slot_ty),
                 self.hash_c_type(),
             ];
             let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
-            let c_ret_ty = self.pointer_c_type(&self.slot_ty.c_slot_ty);
+            let c_ret_ty = &self.pointer_c_type(&self.slot_ty.c_slot_ty);
 
             let name = format!("{}.optlookup", self.name);
             let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
@@ -1131,13 +1131,13 @@ impl Dict {
                 self.run_handle_type(),
             ];
             let mut c_arg_tys = [
-                &self.name,
-                self.pointer_c_type(&self.slot_ty.c_key_ty),
+                &self.name.clone(),
+                &self.pointer_c_type(&self.slot_ty.c_key_ty),
                 self.hash_c_type(),
                 self.run_handle_c_type(),
             ];
             let ret_ty = LLVMPointerType(self.slot_ty.slot_ty, 0);
-            let c_ret_ty = self.pointer_c_type(&self.slot_ty.c_slot_ty);
+            let c_ret_ty = &self.pointer_c_type(&self.slot_ty.c_slot_ty);
 
             let name = format!("{}.lookup", self.name);
             let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
@@ -1204,8 +1204,8 @@ impl Dict {
                 self.hash_type(),
             ];
             let mut c_arg_tys = [
-                &self.name,
-                self.pointer_c_type(&self.slot_ty.c_key_ty),
+                &self.name.clone(),
+                &self.pointer_c_type(&self.slot_ty.c_key_ty),
                 self.hash_c_type(),
             ];
 
@@ -1264,7 +1264,7 @@ impl Dict {
     ) -> WeldResult<LLVMValueRef> {
         if self.to_vec.is_none() {
             let mut arg_tys = [self.dict_ty, self.run_handle_type()];
-            let mut c_arg_tys = [&self.name, self.run_handle_c_type()];
+            let mut c_arg_tys = [&self.name.clone(), self.run_handle_c_type()];
             let ret_ty = kv_vector.vector_ty;
             let c_ret_ty = &kv_vector.name;
 
@@ -1700,8 +1700,8 @@ impl GroupingDict for Dict {
                 self.run_handle_type(),
             ];
             let mut c_arg_tys = [
-                &self.name,
-                self.pointer_c_type(&self.slot_ty.c_key_ty),
+                &self.name.clone(),
+                &self.pointer_c_type(&self.slot_ty.c_key_ty),
                 self.hash_c_type(),
                 &group_vector.c_elem_ty,
                 self.run_handle_c_type(),

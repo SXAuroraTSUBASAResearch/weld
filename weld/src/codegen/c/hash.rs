@@ -60,8 +60,8 @@ impl GenHash for CGenerator {
     ) -> WeldResult<LLVMValueRef> {
         if !self.hash_fns.contains_key(ty) {
             let llvm_ty = self.llvm_type(ty)?;
-            let c_ty = self.c_type(ty)?;
             let mut arg_tys = [LLVMPointerType(llvm_ty, 0), self.hash_type()];
+            let c_ty = self.c_type(ty)?;
             let mut c_arg_tys = [
                 &format!("{}*", c_ty),
                 self.hash_c_type(),

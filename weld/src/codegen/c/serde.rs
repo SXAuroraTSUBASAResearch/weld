@@ -223,9 +223,9 @@ impl SerHelper for CGenerator {
     unsafe fn gen_serialize_fn(&mut self, ty: &Type) -> WeldResult<LLVMValueRef> {
         if !self.serialize_fns.contains_key(ty) {
             let llvm_ty = self.llvm_type(ty)?;
-            let c_ty = self.c_type(ty)?;
+            let c_ty = &self.c_type(ty)?.to_string();
             let buffer_ty = self.llvm_type(&SER_TY)?;
-            let c_buffer_ty = self.c_type(&SER_TY)?;
+            let c_buffer_ty = &self.c_type(&SER_TY)?.to_string();
 
             // Buffer, position, value*, run
             let mut arg_tys = [
@@ -237,11 +237,11 @@ impl SerHelper for CGenerator {
             let mut c_arg_tys = [
                 c_buffer_ty,
                 self.i64_c_type(),
-                self.pointer_c_type(c_ty),
+                &self.pointer_c_type(c_ty),
                 self.run_handle_c_type(),
             ];
             let ret_ty = self.llvm_type(&SER_RET_TY)?;
-            let c_ret_ty = self.c_type(&SER_RET_TY)?;
+            let c_ret_ty = &self.c_type(&SER_RET_TY)?.to_string();
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
             let prefix = CStr::from_ptr(c_prefix);
@@ -590,7 +590,7 @@ impl DeHelper for CGenerator {
         if !self.deserialize_fns.contains_key(ty) {
             let llvm_ty = self.llvm_type(ty)?;
             let buffer_ty = self.llvm_type(&SER_TY)?;
-            let c_buffer_ty = self.c_type(&SER_TY)?;
+            let c_buffer_ty = &self.c_type(&SER_TY)?.to_string();
             // Buffer, position, output*, run
             let mut arg_tys = [
                 buffer_ty,
@@ -599,7 +599,7 @@ impl DeHelper for CGenerator {
                 self.run_handle_type(),
             ];
             let mut c_arg_tys = [
-                &c_buffer_ty,
+                c_buffer_ty,
                 self.i64_c_type(),
                 &format!("typeof(output)  /* FIXME */"),
                 self.run_handle_c_type(),

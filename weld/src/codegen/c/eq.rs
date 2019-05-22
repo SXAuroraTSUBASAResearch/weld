@@ -68,12 +68,11 @@ impl GenEq for CGenerator {
         }
 
         let llvm_ty = self.llvm_type(ty)?;
-        let c_ty = self.c_type(ty)?;
         // XXX Do we need the run handle?
         let mut arg_tys = [LLVMPointerType(llvm_ty, 0), LLVMPointerType(llvm_ty, 0)];
-        let mut c_arg_tys = [
-            self.pointer_c_type(c_ty), self.pointer_c_type(c_ty)
-        ];
+        let c_ty = &self.c_type(ty)?.to_string();
+        let c_ptr_ty = self.pointer_c_type(c_ty);
+        let mut c_arg_tys = [ &c_ptr_ty as &str, &c_ptr_ty ];
         let ret_ty = self.i1_type();
         let c_ret_ty = self.i1_c_type();
 

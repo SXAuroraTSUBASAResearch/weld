@@ -459,7 +459,7 @@ impl BuilderExpressionGen for CGenerator {
             Appender(ref elem_type) => {
                 let vector = &Vector(elem_type.clone());
                 let vector_type = self.llvm_type(vector)?;
-                let c_vector_type = self.c_type(vector)?;
+                let c_vector_type = &self.c_type(vector)?.to_string();
                 let result = {
                     let methods = self.appenders.get_mut(m.kind).unwrap();
                     methods.gen_result(ctx.builder, vector_type, c_vector_type, builder_pointer)?
@@ -544,7 +544,7 @@ impl BuilderExpressionGen for CGenerator {
                             unreachable!()
                         };
                         let llvm_elem_type = self.llvm_type(elem_type)?;
-                        let c_elem_type = self.c_type(elem_type)?;
+                        let c_elem_type = &self.c_type(elem_type)?.to_string();
                         let merger = merger::Merger::define(
                             "merger",
                             *binop,
@@ -606,7 +606,7 @@ impl BuilderExpressionGen for CGenerator {
                             unreachable!()
                         };
                         let llvm_elem_type = self.llvm_type(elem_type)?;
-                        let c_elem_type = self.c_type(elem_type)?;
+                        let c_elem_type = &self.c_type(elem_type)?.to_string();
                         let merger = merger::Merger::define(
                             "merger",
                             *binop,

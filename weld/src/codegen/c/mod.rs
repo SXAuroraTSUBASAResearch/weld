@@ -416,12 +416,12 @@ unsafe fn void_pointer_c_type(_ccontext: CContextRef) -> &'static str {
     "void*"
 }
 
-unsafe fn pointer_c_type(_ccontext: CContextRef, ty: &str) -> &'static str {
-    &format!("{}*", ty)
+unsafe fn pointer_c_type(_ccontext: CContextRef, ty: &str) -> String {
+    format!("{}*", ty)
 }
 
-unsafe fn simd_c_type(_ccontext: CContextRef, ty: &str, size: u32) -> &'static str {
-    &format!("simd_{}_{}", ty, size)
+unsafe fn simd_c_type(_ccontext: CContextRef, ty: &str, size: u32) -> String {
+    format!("simd_{}_{}", ty, size)
 }
 
 unsafe fn run_handle_c_type(ccontext: CContextRef) -> &'static str {
@@ -621,7 +621,7 @@ pub trait CodeGenExt {
     unsafe fn hash_type(&self) -> LLVMTypeRef {
         self.i32_type()
     }
-    unsafe fn hash_c_type(&self) -> &str {
+    unsafe fn hash_c_type(&self) -> &'static str {
         self.i32_c_type()
     }
 
@@ -857,71 +857,71 @@ pub trait CodeGenExt {
     /// For instructions that require `i1` (e.g, conditional branching or select), the caller
     /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
     /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
-    unsafe fn bool_c_type(&self) -> &str {
+    unsafe fn bool_c_type(&self) -> &'static str {
         bool_c_type(self.ccontext())
     }
 
-    unsafe fn i1_c_type(&self) -> &str {
+    unsafe fn i1_c_type(&self) -> &'static str {
         i1_c_type(self.ccontext())
     }
 
-    unsafe fn i8_c_type(&self) -> &str {
+    unsafe fn i8_c_type(&self) -> &'static str {
         i8_c_type(self.ccontext())
     }
 
-    unsafe fn u8_c_type(&self) -> &str {
+    unsafe fn u8_c_type(&self) -> &'static str {
         u8_c_type(self.ccontext())
     }
 
-    unsafe fn i16_c_type(&self) -> &str {
+    unsafe fn i16_c_type(&self) -> &'static str {
         i16_c_type(self.ccontext())
     }
 
-    unsafe fn u16_c_type(&self) -> &str {
+    unsafe fn u16_c_type(&self) -> &'static str {
         u16_c_type(self.ccontext())
     }
 
-    unsafe fn i32_c_type(&self) -> &str {
+    unsafe fn i32_c_type(&self) -> &'static str {
         i32_c_type(self.ccontext())
     }
 
-    unsafe fn u32_c_type(&self) -> &str {
+    unsafe fn u32_c_type(&self) -> &'static str {
         u32_c_type(self.ccontext())
     }
 
-    unsafe fn i64_c_type(&self) -> &str {
+    unsafe fn i64_c_type(&self) -> &'static str {
         i64_c_type(self.ccontext())
     }
 
-    unsafe fn u64_c_type(&self) -> &str {
+    unsafe fn u64_c_type(&self) -> &'static str {
         u64_c_type(self.ccontext())
     }
 
-    unsafe fn f32_c_type(&self) -> &str {
+    unsafe fn f32_c_type(&self) -> &'static str {
         f32_c_type(self.ccontext())
     }
 
-    unsafe fn f64_c_type(&self) -> &str {
+    unsafe fn f64_c_type(&self) -> &'static str {
         f64_c_type(self.ccontext())
     }
 
-    unsafe fn void_c_type(&self) -> &str {
+    unsafe fn void_c_type(&self) -> &'static str {
         void_c_type(self.ccontext())
     }
 
-    unsafe fn void_pointer_c_type(&self) -> &str {
+    unsafe fn void_pointer_c_type(&self) -> &'static str {
         void_pointer_c_type(self.ccontext())
     }
 
-    unsafe fn pointer_c_type(&self, ty: &str) -> &str {
+    unsafe fn pointer_c_type(&self, ty: &str) -> String {
         pointer_c_type(self.ccontext(), ty)
     }
 
-    unsafe fn simd_c_type(&self, ty: &str, size: u32) -> &str {
+    unsafe fn simd_c_type(&self, ty: &str, size: u32) -> String {
         simd_c_type(self.ccontext(), ty, size)
     }
 
-    unsafe fn run_handle_c_type(&self) -> &str {
+    unsafe fn run_handle_c_type(&self) -> &'static str {
         run_handle_c_type(self.ccontext())
     }
 
@@ -2226,9 +2226,9 @@ impl CGenerator {
                 use self::eq::GenEq;
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
-                    let c_key_ty = self.c_type(key)?;
+                    let c_key_ty = &self.c_type(key)?.to_string();
                     let value_ty = self.llvm_type(value)?;
-                    let c_value_ty = self.c_type(value)?;
+                    let c_value_ty = &self.c_type(value)?.to_string();
                     let key_comparator = self.gen_eq_fn(key)?;
                     let dict = dict::Dict::define(
                         "dict",
@@ -2318,9 +2318,9 @@ impl CGenerator {
                 use self::eq::GenEq;
                 if !self.dictionaries.contains_key(ty) {
                     let key_ty = self.llvm_type(key)?;
-                    let c_key_ty = self.c_type(key)?;
+                    let c_key_ty = &self.c_type(key)?.to_string();
                     let value_ty = self.llvm_type(value)?;
-                    let c_value_ty = self.c_type(value)?;
+                    let c_value_ty = &self.c_type(value)?.to_string();
                     let key_comparator = self.gen_eq_fn(key)?;
                     let dict = dict::Dict::define(
                         "dict",
