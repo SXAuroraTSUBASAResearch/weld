@@ -494,6 +494,8 @@ pub struct CGenerator {
     ///
     /// The key maps the *element type* to the vector's type reference and methods on it.
     c_vectors: FnvHashMap<Type, vector::Vector>,
+    /// Counter for unique vector names.
+    vector_index: u32,
     /// A map tracking generated mergers.
     ///
     /// The key maps the merger type to the merger's type reference and methods on it.
@@ -1053,6 +1055,7 @@ impl CGenerator {
             c_functions: FnvHashMap::default(),
             vectors: FnvHashMap::default(),
             c_vectors: FnvHashMap::default(),
+            vector_index: 0,
             mergers: FnvHashMap::default(),
             appenders: FnvHashMap::default(),
             dictionaries: FnvHashMap::default(),
@@ -2240,10 +2243,20 @@ impl CGenerator {
             Vector(ref elem_type) => {
                 // Vectors are a named type, so only generate the name once.
                 if !self.c_vectors.contains_key(elem_type) {
+                    // for C
+                    let name = format!("v{}", self.vector_index);
+                    self.vector_index += 1;
                     let c_elem_type = self.c_type(elem_type)?;
+                    let mut def = CodeBuilder::new();
+                    def.add("typedef struct {");
+                    def.add(format!("{elem_ty}* data;", elem_ty=c_elem_type));
+                    def.add(format!("{u64} length;", u64=self.u64_c_type()));
+                    def.add(format!("}} {};", name));
+                    (*self.ccontext()).prelude_code.add(def.result());
+                    // for LLVM and C
                     let llvm_elem_type = self.llvm_type(elem_type)?;
                     let vector =
-                        vector::Vector::define("vec", llvm_elem_type, self.context, self.module, self.ccontext());
+                        vector::Vector::define(name, llvm_elem_type, self.context, self.module, self.ccontext());
                     self.c_vectors.insert(elem_type.as_ref().clone(), vector);
                 }
                 &self.c_vectors[elem_type].name
