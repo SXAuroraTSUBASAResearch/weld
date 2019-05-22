@@ -8,6 +8,7 @@
 use llvm_sys;
 
 use std::ffi::CString;
+use code_builder::CodeBuilder;
 
 use crate::error::*;
 
@@ -21,6 +22,7 @@ use crate::codegen::c::llvm_exts::*;
 use crate::codegen::c::CodeGenExt;
 use crate::codegen::c::LLVM_VECTOR_WIDTH;
 use crate::codegen::c::CContextRef;
+use crate::codegen::c::u64_c_type;
 
 pub const POINTER_INDEX: u32 = 0;
 pub const SIZE_INDEX: u32 = 1;
@@ -67,6 +69,15 @@ impl Appender {
         module: LLVMModuleRef,
         ccontext: CContextRef,
     ) -> Appender {
+        // for C
+        let mut def = CodeBuilder::new();
+        def.add("typedef struct {");
+        def.add(format!("{elem_ty}* data;", elem_ty=c_elem_ty));
+        def.add(format!("{u64} size;", u64=u64_c_type(ccontext)));
+        def.add(format!("{u64} capacity;", u64=u64_c_type(ccontext)));
+        def.add(format!("}} {};", name.as_ref()));
+        (*ccontext).prelude_code.add(def.result());
+        // for LLVM
         let c_name = CString::new(name.as_ref()).unwrap();
         // An appender is struct with a pointer, size, and capacity.
         let mut layout = [

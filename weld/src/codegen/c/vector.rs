@@ -11,6 +11,7 @@
 use llvm_sys;
 
 use std::ffi::CString;
+use code_builder::CodeBuilder;
 
 use crate::ast::Type;
 use crate::error::*;
@@ -28,7 +29,6 @@ use super::LLVM_VECTOR_WIDTH;
 use super::u64_c_type;
 
 use crate::codegen::c::CContextRef;
-use code_builder::CodeBuilder;
 
 /// Index of the pointer into the vector data structure.
 pub const POINTER_INDEX: u32 = 0;
