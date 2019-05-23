@@ -397,7 +397,7 @@ impl ForLoopGenInternal for CGenerator {
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement)?;
             }
-            let loop_terminator = (loop_end_bb, context.get_value(&parfor.builder_arg)?);
+            let loop_terminator = (loop_end_bb, context.get_value(&parfor.builder_arg)?, &context.c_get_value(&parfor.builder_arg)? as &str);
             self.gen_terminator(context, &bb, Some(loop_terminator))?;
         }
 

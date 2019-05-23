@@ -2252,7 +2252,7 @@ impl CGenerator {
         &mut self,
         context: &mut FunctionContext<'_>,
         bb: &BasicBlock,
-        loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef)>,
+        loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef, &str)>,
     ) -> WeldResult<()> {
         if self.conf.trace_run {
             self.gen_print(
@@ -2339,16 +2339,28 @@ impl CGenerator {
                 LLVMBuildBr(context.builder, context.get_block(*id)?);
             }
             EndFunction(ref sym) => {
-                // for C
-                context.body.add("#error EndFunction is not implemented yet");
-
-                // for LLVM
-                if let Some((jumpto, loop_builder)) = loop_terminator {
+                if let Some((jumpto, loop_builder, c_loop_builder)) = loop_terminator {
+                    // for C
+                    context.body.add("// EndFunction in loop");
+                    context.body.add(format!(
+                        "{} = {};",
+                        c_loop_builder,
+                        context.c_get_value(sym)?,
+                    ));
+                    context.body.add("continue;");
+                    // for LLVM
                     let pointer = context.get_value(sym)?;
                     let updated_builder = self.load(context.builder, pointer)?;
                     LLVMBuildStore(context.builder, updated_builder, loop_builder);
                     LLVMBuildBr(context.builder, jumpto);
                 } else {
+                    // for C
+                    context.body.add("// EndFunction");
+                    context.body.add(format!(
+                        "return {};",
+                        context.c_get_value(sym)?,
+                    ));
+                    // for LLVM
                     let pointer = context.get_value(sym)?;
                     let return_value = self.load(context.builder, pointer)?;
                     LLVMBuildRet(context.builder, return_value);
