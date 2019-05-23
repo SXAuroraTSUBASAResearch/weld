@@ -676,26 +676,14 @@ pub trait CodeGenExt {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         // for C
         let mut code = CodeBuilder::new();
+        let args_line = self.c_define_args(&c_arg_tys);
         code.add(format!(
             "{ret_ty} {fun}({args})",
             ret_ty=c_ret_ty,
             fun=name.as_ref(),
-            args="test",
-        ));
-        code.add("{");
-
-        /*
-        let mut arg_tys = self.c_argument_types(func)?;
-        arg_tys.push(self.run_handle_c_type());
-        let args_line = self.c_define_args(&arg_tys);
-        let ret_ty = self.c_type(&func.return_type)?;
-        (*self.ccontext()).body_code.add(format!("{ret_ty} {fun}({args})",
-            ret_ty=ret_ty,
-            fun=name.as_ref(),
             args=args_line,
         ));
-        (*self.ccontext()).body_code.add("{");
-        */
+
         // for LLVM
         let name = CString::new(name.as_ref()).unwrap();
         let function = LLVMAddFunction(self.module(), name.as_ptr(), func_ty);
@@ -1046,6 +1034,41 @@ pub trait CodeGenExt {
 
     unsafe fn null_ptr(&self, ty: LLVMTypeRef) -> LLVMValueRef {
         LLVMConstPointerNull(LLVMPointerType(ty, 0))
+    }
+
+    fn c_get_param(&self, index: usize) -> String {
+        format!("p{}", index)
+    }
+
+    /// Helper functions to treate arguments.
+    fn c_call_args(&mut self, args: &[String]) -> String {
+        let mut args_line = String::new();
+        let mut last_arg: &str = "";
+        for arg in args {
+            if !last_arg.is_empty() {
+                args_line = format!("{}{}, ", args_line, last_arg);
+            }
+            last_arg = arg;
+        }
+        format!("{}{}", args_line, last_arg)
+    }
+    unsafe fn c_define_args(&mut self, arg_tys: &[String]) -> String {
+        let mut args_line = String::new();
+        let mut last_arg: &str = "";
+        let mut last_i = 0;
+        for (i, arg) in arg_tys.iter().enumerate() {
+            if i != 0 {
+                args_line = format!("{}{} {}, ", args_line, last_arg, self.c_get_param(last_i));
+            }
+            last_arg = arg;
+            last_i = i;
+        }
+        if self.run_handle_c_type() == last_arg {
+            // Write "run" as parameter if the type of last arg is "RunHandle*".
+            format!("{}{} run", args_line, last_arg)
+        } else {
+            format!("{}{} {}", args_line, last_arg, self.c_get_param(last_i))
+        }
     }
 }
 
@@ -1445,32 +1468,6 @@ impl CGenerator {
             types.push(self.c_type(ty)?);
         }
         Ok(types)
-    }
-
-    /// Helper functions to treate arguments.
-    pub fn c_call_args(&mut self, args: &[String]) -> String {
-        let mut args_line = String::new();
-        let mut last_arg: &str = "";
-        for arg in args {
-            if !last_arg.is_empty() {
-                args_line = format!("{}{}, ", args_line, last_arg);
-            }
-            last_arg = arg;
-        }
-        format!("{}{}", args_line, last_arg)
-    }
-    pub fn c_define_args(&mut self, arg_tys: &[String]) -> String {
-        let mut args_line = String::new();
-        let mut last_arg: &str = "";
-        for (i, arg) in arg_tys.iter().enumerate() {
-            if !last_arg.is_empty() {
-                // Generating i-th argument at i+1 iteration
-                args_line = format!("{}{} p{}, ", args_line, last_arg, i-1);
-            }
-            last_arg = arg;
-        }
-        // last arg is "RunHandle* run"
-        format!("{}{} run", args_line, last_arg)
     }
 
     /// Declare a function in the SIR module and track its reference.

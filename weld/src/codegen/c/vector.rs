@@ -529,12 +529,17 @@ impl Vector {
             let c_arg_tys = [self.name.clone()];
             let c_ret_ty = &self.i64_c_type();
 
-            // for C
+            // Use C name.
             let name = format!("{}_size", self.name);
-            // for LLVM
-            let name = format!("{}.size", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            // let name = format!("{}.size", self.name);
+            let (function, builder, _, mut ccode) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
+            // for C
+            ccode.add("{");
+            ccode.add(format!("return {}->size;", self.c_get_param(0)));
+            ccode.add("}");
+            (*self.ccontext()).prelude_code.add(ccode.result());
+            // for LLVM
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
             let vector = LLVMGetParam(function, 0);
