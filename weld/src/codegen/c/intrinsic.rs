@@ -9,6 +9,7 @@
 use fnv;
 use libc;
 use llvm_sys;
+use code_builder::CodeBuilder;
 
 use fnv::FnvHashMap;
 
@@ -196,6 +197,7 @@ impl Intrinsics {
     /// Convinience wrapper for calling any functions.
     pub unsafe fn c_call(
         &mut self,
+        builder: &mut CodeBuilder,
         fun: &str,
         args: &[&str],
         ret_ty: &str,
@@ -203,12 +205,12 @@ impl Intrinsics {
     ) -> String {
         let args_line = self.c_args(args);
         if let Some(res) = result {
-            (*self.ccontext()).body_code.add(format!(
+            builder.add(format!(
                 "{} = {}({});", res, fun, args_line));
             res
         } else {
             let res = (*self.ccontext()).var_ids.next();
-            (*self.ccontext()).body_code.add(format!(
+            builder.add(format!(
                 "{} {} = {}({});", ret_ty, res, fun, args_line));
             res
         }
@@ -216,11 +218,12 @@ impl Intrinsics {
 
     pub unsafe fn c_call_void(
         &mut self,
+        builder: &mut CodeBuilder,
         fun: &str,
         args: &[&str],
     ) {
         let args_line = self.c_args(args);
-        (*self.ccontext()).body_code.add(format!(
+        builder.add(format!(
             "(void){}({});", fun, args_line));
     }
 
@@ -243,13 +246,14 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_init(
         &mut self,
+        builder: &mut CodeBuilder,
         nworkers: &str,
         memlimit: &str,
         name: Option<String>,
     ) -> String {
         let args = [nworkers, memlimit];
-        let run_handle_type = self.run_handle_c_type().to_string();
-        self.c_call("weld_runst_init", &args, &run_handle_type, name)
+        let ret_type = &self.run_handle_c_type();
+        self.c_call(builder, "weld_runst_init", &args, ret_type, name)
     }
 
     /// Convinience wrapper for calling the `weld_run_get_result` intrinsic.
@@ -270,11 +274,13 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_get_result(
         &mut self,
+        builder: &mut CodeBuilder,
         run: &str,
         name: Option<String>,
     ) -> String {
         let args = [run];
-        self.c_call("weld_runst_get_result", &args, "void*", name)
+        let ret_type = &self.void_pointer_c_type();
+        self.c_call(builder, "weld_runst_get_result", &args, ret_type, name)
     }
 
     /// Convinience wrapper for calling the `weld_run_set_result` intrinsic.
@@ -293,6 +299,17 @@ impl Intrinsics {
             args.len() as u32,
             name.unwrap_or(c_str!("")),
         )
+    }
+    pub unsafe fn c_call_weld_run_set_result(
+        &mut self,
+        builder: &mut CodeBuilder,
+        run: &str,
+        pointer: &str,
+        name: Option<String>,
+    ) -> String {
+        let args = [run, pointer];
+        let ret_type = &self.void_pointer_c_type();
+        self.c_call(builder, "weld_runst_set_result", &args, ret_type, name)
     }
 
     /// Convinience wrapper for calling the `weld_run_malloc` intrinsic.
@@ -314,13 +331,14 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_malloc(
         &mut self,
+        builder: &mut CodeBuilder,
         run: &str,
         size: &str,
         name: Option<String>,
     ) -> String {
         let args = [run, size];
-        let run_handle_type = self.run_handle_c_type().to_string();
-        self.c_call("weld_runst_malloc", &args, &run_handle_type, name)
+        let ret_type = &self.void_pointer_c_type();
+        self.c_call(builder, "weld_runst_malloc", &args, ret_type, name)
     }
 
 
@@ -378,11 +396,12 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_get_errno(
         &mut self,
+        builder: &mut CodeBuilder,
         run: &str,
         name: Option<String>,
     ) -> String {
         let args = [run];
-        self.c_call("weld_runst_get_errno", &args, "i64", name)
+        self.c_call(builder, "weld_runst_get_errno", &args, "i64", name)
     }
 
 
@@ -630,6 +649,15 @@ void* weld_runst_get_result({run_handle} run)
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_set_result as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add(format!("\
+void* weld_runst_set_result({run_handle} run, {voidp} p)
+{{
+    return ((WeldRuntimeContextRef)run)->result = p;
+}}",
+            run_handle=self.run_handle_c_type(),
+            voidp=self.void_pointer_c_type(),
+        ));
+
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];
         let name = CString::new("weld_runst_malloc").unwrap();

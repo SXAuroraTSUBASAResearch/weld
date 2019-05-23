@@ -54,6 +54,7 @@ use fnv;
 
 use libc;
 use llvm_sys;
+use code_builder::CodeBuilder;
 
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -67,7 +68,6 @@ use crate::error::*;
 use crate::sir::*;
 use crate::util::stats::CompilationStats;
 use crate::util::id::IdGenerator;
-use code_builder::CodeBuilder;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
@@ -422,6 +422,10 @@ unsafe fn pointer_c_type(_ccontext: CContextRef, ty: &str) -> String {
 
 unsafe fn simd_c_type(_ccontext: CContextRef, ty: &str, size: u32) -> String {
     format!("simd_{}_{}", ty, size)
+}
+
+unsafe fn c_type_of(_ccontext: CContextRef, ty: &str) -> String {
+    format!("typeof({})", ty)
 }
 
 unsafe fn run_handle_c_type(ccontext: CContextRef) -> String {
@@ -905,6 +909,10 @@ pub trait CodeGenExt {
         pointer_c_type(self.ccontext(), ty)
     }
 
+    unsafe fn c_type_of(&self, ty: &str) -> String {
+        c_type_of(self.ccontext(), ty)
+    }
+
     unsafe fn simd_c_type(&self, ty: &str, size: u32) -> String {
         simd_c_type(self.ccontext(), ty, size)
     }
@@ -1266,6 +1274,7 @@ impl CGenerator {
         // Generate codes for init_run block.
         // for C
         self.intrinsics.c_call_weld_run_init(
+            &mut (*self.ccontext()).body_code,
             "input->nworkers",
             "input->memlimit",
             Some("run".to_string()),
@@ -1375,12 +1384,20 @@ impl CGenerator {
 
         // Get the results, errno, and run.
         // for C
-        let res = self.intrinsics.c_call_weld_run_get_result("run", None);
+        let res = self.intrinsics.c_call_weld_run_get_result(
+            &mut (*self.ccontext()).body_code,
+            "run",
+            None,
+        );
         let c_result = (*self.ccontext()).var_ids.next();
         (*self.ccontext()).body_code.add(format!(
             "{i64} {result} = ({i64}){res};",
             i64=self.i64_c_type(), result=c_result, res=res));
-        let c_errno = self.intrinsics.c_call_weld_run_get_errno("run", None);
+        let c_errno = self.intrinsics.c_call_weld_run_get_errno(
+            &mut (*self.ccontext()).body_code,
+            "run",
+            None,
+        );
         let c_run_int = (*self.ccontext()).var_ids.next();
         (*self.ccontext()).body_code.add(format!(
             "{i64} {run_int} = ({i64})run;",
@@ -1398,7 +1415,12 @@ impl CGenerator {
         let return_size = self.c_size_of(c_output_type);
         let return_pointer = self
             .intrinsics
-            .c_call_weld_run_malloc("run", &return_size, None);
+            .c_call_weld_run_malloc(
+                &mut (*self.ccontext()).body_code,
+                "run",
+                &return_size,
+                None,
+            );
         (*self.ccontext()).body_code.add(format!("{output}* output = ({output}*){ptr};", output=c_output_type, ptr=return_pointer));
         (*self.ccontext()).body_code.add(format!(
             "output->output = {};", c_result));
@@ -2214,8 +2236,38 @@ impl CGenerator {
         match bb.terminator {
             ProgramReturn(ref sym) => {
                 // for C
-                context.body.add("#error ProgramReturn is not implemented yet");
+                let value = context.c_get_value(sym)?;
+                let run = context.c_get_run();
+                let ty = self.c_type_of(&value);
+                let size = self.c_size_of(&ty);
+                let bytes = self
+                    .intrinsics
+                    .c_call_weld_run_malloc(
+                        &mut context.body,
+                        run,
+                        &size,
+                        None,
+                    );
+                context.body.add(format!(
+                    "*({}){} = {};",
+                    self.pointer_c_type(&ty),
+                    bytes,
+                    value,
+                ));
+                let _ = self
+                    .intrinsics
+                    .c_call_weld_run_set_result(
+                        &mut context.body,
+                        run,
+                        &bytes,
+                        None,
+                    );
+                context.body.add(format!(
+                    "return {};",
+                    value,
+                ));
 
+                // for LLVM
                 let value = self.load(context.builder, context.get_value(sym)?)?;
                 let run = context.get_run();
                 let ty = LLVMTypeOf(value);
@@ -2574,6 +2626,9 @@ impl<'a> FunctionContext<'a> {
     /// The run handle is always the last argument of an SIR function.
     pub fn get_run(&self) -> LLVMValueRef {
         unsafe { LLVMGetLastParam(self.llvm_function) }
+    }
+    pub fn c_get_run(&self) -> &'static str {
+        "run"
     }
 }
 
