@@ -210,9 +210,28 @@ impl BuilderExpressionGen for CGenerator {
         statement: &Statement,
     ) -> WeldResult<()> {
         let nb = NewBuilderStatement::extract(statement, ctx.sir_function)?;
+        let c_output_pointer = ctx.c_get_value(nb.output)?;
         let output_pointer = ctx.get_value(nb.output)?;
         match *nb.kind {
             Appender(_) => {
+                // for C
+                let argument = if let Some(arg) = nb.arg {
+                    ctx.c_get_value(arg)?
+                } else {
+                    format!("{}", appender::DEFAULT_CAPACITY)
+                };
+                ctx.body.add(format!(
+                    "{} = {};",
+                    c_output_pointer,
+                    {
+                        let methods = self.appenders.get_mut(nb.kind).unwrap();
+                        let run = ctx.c_get_run();
+                        methods.c_gen_new(ctx.builder, &mut self.intrinsics,
+                                          run, &argument)?
+                    },
+                ));
+
+                // for LLVM
                 // The argument is either the provided one or the default capacity.
                 let argument = if let Some(arg) = nb.arg {
                     self.load(ctx.builder, ctx.get_value(arg)?)?
@@ -228,6 +247,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             DictMerger(ref key, ref val, _) => {
+                // for C
+                ctx.body.add(
+                    "#error NewBuilder for DictMerger is not implemented yet");
+
+                // for LLVM
                 let dict_type = &Dict(key.clone(), val.clone());
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let dictmerger = {
@@ -243,6 +267,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             GroupMerger(ref key, ref val) => {
+                // for C
+                ctx.body.add(
+                    "#error NewBuilder for GroupMerger is not implemented yet");
+
+                // for LLVM
                 let dict_type = &Dict(key.clone(), Box::new(Vector(val.clone())));
                 let default_capacity = self.i64(dict::INITIAL_CAPACITY);
                 let groupmerger = {
@@ -258,6 +287,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             Merger(_, _) => {
+                // for C
+                ctx.body.add(
+                    "#error NewBuilder for Merger is not implemented yet");
+
+                // for LLVM
                 // The argument is either the provided one or the identity.
                 let argument = if let Some(arg) = nb.arg {
                     self.load(ctx.builder, ctx.get_value(arg)?)?
@@ -273,6 +307,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             VecMerger(ref elem, _) => {
+                // for C
+                ctx.body.add(
+                    "#error NewBuilder for VecMerger is not implemented yet");
+
+                // for LLVM
                 use super::vector::VectorExt;
                 let argument = nb.arg.unwrap();
                 let argument = self.load(ctx.builder, ctx.get_value(argument)?)?;
@@ -294,6 +333,11 @@ impl BuilderExpressionGen for CGenerator {
         let builder_pointer = ctx.get_value(m.builder)?;
         match *m.kind {
             Appender(_) => {
+                // for C
+                ctx.body.add(
+                    "#error Merge for Appender is not implemented yet");
+
+                // for LLVM
                 let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
                 let methods = self.appenders.get_mut(m.kind).unwrap();
                 let _ = methods.gen_merge(
@@ -306,6 +350,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             DictMerger(ref key, ref val, ref binop) => {
+                // for C
+                ctx.body.add(
+                    "#error Merge for DictMerger is not implemented yet");
+
+                // for LLVM
                 use self::hash::*;
                 use crate::ast::Type::Scalar;
 
@@ -379,6 +428,11 @@ impl BuilderExpressionGen for CGenerator {
                 )
             }
             GroupMerger(ref key, ref value) => {
+                // for C
+                ctx.body.add(
+                    "#error Merge for GroupMerger is not implemented yet");
+
+                // for LLVM
                 use self::dict::GroupingDict;
                 use self::hash::*;
                 // The merge value is a {K, V} struct.
@@ -406,12 +460,22 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             Merger(_, _) => {
+                // for C
+                ctx.body.add(
+                    "#error Merge for Merger is not implemented yet");
+
+                // for LLVM
                 let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
                 let methods = self.mergers.get_mut(m.kind).unwrap();
                 let _ = methods.gen_merge(ctx.builder, builder_pointer, merge_value)?;
                 Ok(())
             }
             VecMerger(ref elem, ref binop) => {
+                // for C
+                ctx.body.add(
+                    "#error Merge for VecMerger is not implemented yet");
+
+                // for LLVM
                 use super::vector::VectorExt;
                 // The type of the merge value is {index, value} so use GEP to extract
                 // the key and the key pointer.
@@ -457,6 +521,11 @@ impl BuilderExpressionGen for CGenerator {
         let builder_pointer = ctx.get_value(m.builder)?;
         match *m.kind {
             Appender(ref elem_type) => {
+                // for C
+                ctx.body.add(
+                    "#error Res for Appender is not implemented yet");
+
+                // for LLVM
                 let vector = &Vector(elem_type.clone());
                 let vector_type = self.llvm_type(vector)?;
                 let c_vector_type = &self.c_type(vector)?.to_string();
@@ -468,6 +537,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             DictMerger(_, _, _) | GroupMerger(_, _) => {
+                // for C
+                ctx.body.add(
+                    "#error Res for DictMerger/GroupMerger is not implemented yet");
+
+                // for LLVM
                 // A dictmerger just updates a dictionary in-place, so return the produced
                 // dictionary.
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
@@ -475,6 +549,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             Merger(_, _) => {
+                // for C
+                ctx.body.add(
+                    "#error Res for Merger is not implemented yet");
+
+                // for LLVM
                 let result = {
                     let methods = self.mergers.get_mut(m.kind).unwrap();
                     methods.gen_result(ctx.builder, builder_pointer)?
@@ -483,6 +562,11 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             VecMerger(_, _) => {
+                // for C
+                ctx.body.add(
+                    "#error Res for VecMerger is not implemented yet");
+
+                // for LLVM
                 // VecMergers update a vector in place, so just return the produced vector.
                 let builder_loaded = self.load(ctx.builder, builder_pointer)?;
                 LLVMBuildStore(ctx.builder, builder_loaded, output_pointer);

@@ -1048,6 +1048,10 @@ pub trait CodeGenExt {
         format!("p{}", index)
     }
 
+    fn c_get_run(&self) -> &'static str {
+        "run"
+    }
+
     /// Helper functions to treate arguments.
     fn c_call_args(&mut self, args: &[String]) -> String {
         let mut args_line = String::new();
@@ -1524,7 +1528,7 @@ impl CGenerator {
     pub unsafe fn c_call_sir_function(
         &mut self,
         func: &SirFunction,
-        args_line: &String,
+        args_line: &str,
         result: Option<String>,
     ) -> WeldResult<String> {
         if let Some(res) = result {
@@ -1702,6 +1706,7 @@ impl CGenerator {
                     output,
                     value,
                 ));
+
                 // for LLVM
                 let loaded = self.load(context.builder, context.get_value(value)?)?;
                 LLVMBuildStore(context.builder, loaded, context.get_value(output)?);
@@ -1711,6 +1716,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error AssignLiteral is not implemented yet");
 
+                // for LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_assign_literal(context, statement)
             }
@@ -1718,6 +1724,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error BinOp is not implemented yet");
 
+                // for LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
             }
@@ -1725,6 +1732,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Broadcast is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
@@ -1745,6 +1753,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Cast is not implemented yet");
 
+                // for LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_cast(context, statement)
             }
@@ -1755,6 +1764,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error CUDF is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let return_ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
                 let mut arg_tys = vec![];
@@ -1787,6 +1797,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Desirialize is not implemented yet");
 
+                // for LLVM
                 use self::serde::SerDeGen;
                 self.gen_deserialize(context, statement)
             }
@@ -1794,6 +1805,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error GetField is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let value_pointer = context.get_value(value)?;
                 let elem_pointer =
@@ -1806,6 +1818,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error KeyExists is not implemented yet");
 
+                // for LLVM
                 use self::hash::GenHash;
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
@@ -1842,6 +1855,7 @@ impl CGenerator {
                         methods.c_gen_size(context.builder,
                                            &context.c_get_value(child)?)?,
                     ));
+
                     // for LLVM
                     let result = methods.gen_size(context.builder, child_value)?;
                     LLVMBuildStore(context.builder, result, output_pointer);
@@ -1849,6 +1863,7 @@ impl CGenerator {
                 } else if let Dict(_, _) = *child_type {
                     // for C
                     context.body.add("#error Length for dict is not implemented yet");
+
                     // for LLVM
                     let pointer = {
                         let methods = self.dictionaries.get_mut(child_type).unwrap();
@@ -1868,6 +1883,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Lookup is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
@@ -1909,6 +1925,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error OptLookup is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
@@ -1951,6 +1968,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error MakeStruct is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 for (i, elem) in elems.iter().enumerate() {
                     let elem_pointer =
@@ -1964,6 +1982,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error MakeVector is not implemented yet");
 
+                // for LLVM
                 use self::vector::VectorExt;
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(output)?;
@@ -1979,9 +1998,7 @@ impl CGenerator {
                 Ok(())
             }
             Merge { .. } => {
-                // for C
-                context.body.add("#error merge is not implemented yet");
-
+                // for C and LLVM
                 use self::builder::BuilderExpressionGen;
                 self.gen_merge(context, statement)
             }
@@ -1989,6 +2006,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Negate is not implemented yet");
 
+                // for LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_negate(context, statement)
             }
@@ -1996,6 +2014,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Not is not implemented yet");
 
+                // for LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_not(context, statement)
             }
@@ -2003,6 +2022,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Assert is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
                 let result = self.intrinsics.call_weld_run_assert(
@@ -2016,23 +2036,17 @@ impl CGenerator {
                 Ok(())
             }
             NewBuilder { .. } => {
-                // for C
-                context.body.add("#error NewBuilder is not implemented yet");
-
+                // for C and LLVM
                 use self::builder::BuilderExpressionGen;
                 self.gen_new_builder(context, statement)
             }
             ParallelFor(_) => {
-                // for C
-                context.body.add("#error ParallelFor is not implemented yet");
-
+                // for C and LLVM
                 use self::builder::BuilderExpressionGen;
                 self.gen_for(context, statement)
             }
             Res(_) => {
-                // for C
-                context.body.add("#error Res is not implemented yet");
-
+                // for C and LLVM
                 use self::builder::BuilderExpressionGen;
                 self.gen_result(context, statement)
             }
@@ -2044,6 +2058,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Select is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
                 let cond = self.bool_to_i1(context.builder, cond);
@@ -2054,6 +2069,10 @@ impl CGenerator {
                 Ok(())
             }
             Serialize(_) => {
+                // for C
+                context.body.add("#error Serialize is not implemented yet");
+
+                // for LLVM
                 use self::serde::SerDeGen;
                 self.gen_serialize(context, statement)
             }
@@ -2062,6 +2081,10 @@ impl CGenerator {
                 ref index,
                 ref size,
             } => {
+                // for C
+                context.body.add("#error Slice is not implemented yet");
+
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let index_value = self.load(context.builder, context.get_value(index)?)?;
@@ -2085,6 +2108,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Sort is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let output_type = context
                     .sir_function
@@ -2168,6 +2192,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error ToVec is not implemented yet");
 
+                // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
@@ -2200,6 +2225,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error UnaryOp is not implemented yet");
 
+                // for LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_unaryop(context, statement)
             }
@@ -2291,6 +2317,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Branch is not implemented yet");
 
+                // for LLVM
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
                 let cond = self.bool_to_i1(context.builder, cond);
                 let _ = LLVMBuildCondBr(
@@ -2304,12 +2331,14 @@ impl CGenerator {
                 // for C
                 context.body.add("#error JumpBlock is not implemented yet");
 
+                // for LLVM
                 LLVMBuildBr(context.builder, context.get_block(*id)?);
             }
             EndFunction(ref sym) => {
                 // for C
                 context.body.add("#error EndFunction is not implemented yet");
 
+                // for LLVM
                 if let Some((jumpto, loop_builder)) = loop_terminator {
                     let pointer = context.get_value(sym)?;
                     let updated_builder = self.load(context.builder, pointer)?;
@@ -2325,6 +2354,7 @@ impl CGenerator {
                 // for C
                 context.body.add("#error Crash is not implemented yet");
 
+                // for LLVM
                 use crate::runtime::WeldRuntimeErrno;
                 let errno = self.i64(WeldRuntimeErrno::Unknown as i64);
                 self.intrinsics.call_weld_run_set_errno(

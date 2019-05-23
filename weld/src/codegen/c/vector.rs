@@ -206,19 +206,19 @@ pub struct Vector {
     module: LLVMModuleRef,
     ccontext: CContextRef,
     new: Option<LLVMValueRef>,
-    c_new: Option<String>,
+    c_new: String,
     clone: Option<LLVMValueRef>,
-    c_clone: Option<String>,
+    c_clone: String,
     at: Option<LLVMValueRef>,
-    c_at: Option<String>,
+    c_at: String,
     vat: Option<LLVMValueRef>,
-    c_vat: Option<String>,
+    c_vat: String,
     size: Option<LLVMValueRef>,
     c_size: String,
     slice: Option<LLVMValueRef>,
-    c_slice: Option<String>,
+    c_slice: String,
     extend: Option<LLVMValueRef>,
-    c_extend: Option<String>,
+    c_extend: String,
 }
 
 impl CodeGenExt for Vector {
@@ -268,19 +268,19 @@ impl Vector {
             elem_ty,
             c_elem_ty,
             new: None,
-            c_new: None,
+            c_new: String::new(),
             clone: None,
-            c_clone: None,
+            c_clone: String::new(),
             at: None,
-            c_at: None,
+            c_at: String::new(),
             vat: None,
-            c_vat: None,
+            c_vat: String::new(),
             size: None,
             c_size: String::new(),
             slice: None,
-            c_slice: None,
+            c_slice: String::new(),
             extend: None,
-            c_extend: None,
+            c_extend: String::new(),
         }
     }
 
@@ -555,20 +555,19 @@ impl Vector {
         if self.size.is_none() {
             // Generate size function only once.
             let mut arg_tys = [self.vector_ty];
-            let ret_ty = self.i64_type();
+            let ret_ty = self.u64_type();
             let c_arg_tys = [self.c_pointer_type(&self.name)];
             let c_ret_ty = &self.c_u64_type();
 
             // Use C name.
             let name = format!("{}_size", self.name);
-            // let name = format!("{}.size", self.name);
-            let (function, builder, _, mut ccode) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
 
             // for C
-            ccode.add("{");
-            ccode.add(format!("return {}->size;", self.c_get_param(0)));
-            ccode.add("}");
-            (*self.ccontext()).prelude_code.add(ccode.result());
+            c_code.add("{");
+            c_code.add(format!("return {}->size;", self.c_get_param(0)));
+            c_code.add("}");
+            (*self.ccontext()).prelude_code.add(c_code.result());
             self.c_size = name;
             // for LLVM
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);

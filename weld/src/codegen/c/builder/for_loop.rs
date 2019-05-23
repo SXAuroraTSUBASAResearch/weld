@@ -101,6 +101,10 @@ impl ForLoopGenInternal for CGenerator {
     ) -> WeldResult<()> {
         let iterations = self.gen_bounds_check(ctx, parfor)?;
 
+        // for C
+        ctx.body.add("#error ParallelFor is not implemented yet");
+
+        // for LLVM
         let sir_function = &ctx.sir_program.funcs[parfor.body];
         assert!(sir_function.loop_body);
 

@@ -42,9 +42,13 @@ pub struct Appender {
     module: LLVMModuleRef,
     ccontext: CContextRef,
     new: Option<LLVMValueRef>,
+    c_new: String,
     merge: Option<LLVMValueRef>,
+    c_merge: String,
     vmerge: Option<LLVMValueRef>,
+    c_vmerge: String,
     result: Option<LLVMValueRef>,
+    c_result: String,
 }
 
 impl CodeGenExt for Appender {
@@ -97,9 +101,13 @@ impl Appender {
             module,
             ccontext,
             new: None,
+            c_new: String::new(),
             merge: None,
+            c_merge: String::new(),
             vmerge: None,
+            c_vmerge: String::new(),
             result: None,
+            c_result: String::new(),
         }
     }
 
@@ -128,23 +136,42 @@ impl Appender {
         }
     }
 
-    /// Generates code for a new appender.
-    pub unsafe fn gen_new(
+    /// Define code for a new appender.
+    pub unsafe fn define_new(
         &mut self,
-        builder: LLVMBuilderRef,
         intrinsics: &mut Intrinsics,
-        run: LLVMValueRef,
-        capacity: LLVMValueRef,
-    ) -> WeldResult<LLVMValueRef> {
+    ) {
         if self.new.is_none() {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
-            let c_arg_tys = [self.c_i64_type(), self.c_run_handle_type()];
+            let c_arg_tys = [self.c_u64_type(), self.c_run_handle_type()];
             let ret_ty = self.appender_ty;
             let c_ret_ty = &self.name.clone();
 
-            let name = format!("{}.new", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            // Use C name.
+            let name = format!("{}_new", self.name);
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
 
+            // for C
+            c_code.add("{");
+            // let elem_size = self.size_of(self.elem_ty);
+            c_code.add(format!("{} ret;", self.name));
+            let bytes = intrinsics.c_call_weld_run_malloc(
+                &mut c_code,
+                &self.c_get_run(),
+                &format!("{capacity} * {elem_size}",
+                         capacity=self.c_get_param(0),
+                         elem_size=self.c_size_of(&self.c_elem_ty),
+                ),
+                None,
+            );
+            c_code.add(format!("ret->data = {};", bytes));
+            c_code.add("ret->size = 0;");
+            c_code.add(format!("ret->capacity = {};", self.c_get_param(0)));
+            c_code.add("return ret;");
+            c_code.add("}");
+            (*self.ccontext()).prelude_code.add(c_code.result());
+            self.c_new = name;
+            // for LLVM
             let capacity = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
             let elem_size = self.size_of(self.elem_ty);
@@ -167,6 +194,18 @@ impl Appender {
             self.new = Some(function);
             LLVMDisposeBuilder(builder);
         }
+    }
+    /// Generates code for a new appender.
+    pub unsafe fn gen_new(
+        &mut self,
+        builder: LLVMBuilderRef,
+        intrinsics: &mut Intrinsics,
+        run: LLVMValueRef,
+        capacity: LLVMValueRef,
+    ) -> WeldResult<LLVMValueRef> {
+        if self.new.is_none() {
+            self.define_new(intrinsics);
+        }
         let mut args = [capacity, run];
         Ok(LLVMBuildCall(
             builder,
@@ -175,6 +214,18 @@ impl Appender {
             args.len() as u32,
             c_str!(""),
         ))
+    }
+    pub unsafe fn c_gen_new(
+        &mut self,
+        _builder: LLVMBuilderRef,
+        intrinsics: &mut Intrinsics,
+        run: &str,
+        capacity: &str,
+    ) -> WeldResult<String> {
+        if self.new.is_none() {
+            self.define_new(intrinsics);
+        }
+        Ok(format!("{}({}, {});", self.c_new, capacity, run))
     }
 
     /// Internal merge function generation that supports vectorization.
