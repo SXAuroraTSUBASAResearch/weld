@@ -1614,19 +1614,6 @@ impl CGenerator {
         program: &SirProgram,
         func: &SirFunction,
     ) -> WeldResult<()> {
-        // for C
-        let mut arg_tys = self.c_argument_types(func)?;
-        arg_tys.push(self.c_run_handle_type());
-        let args_line = self.c_define_args(&arg_tys);
-        let ret_ty = self.c_type(&func.return_type)?.to_string();
-        let function = &self.c_functions[&func.id];
-        (*self.ccontext()).body_code.add(format!("{ret_ty} {fun}({args})",
-            ret_ty=ret_ty,
-            fun=function,
-            args=args_line,
-        ));
-        (*self.ccontext()).body_code.add("{");
-        // for LLVM
         let function = self.functions[&func.id];
         // + 1 to account for the run handle.
         if LLVMCountParams(function) != (1 + func.params.len()) as u32 {
@@ -1636,11 +1623,28 @@ impl CGenerator {
         // Create a context for the function.
         let context = &mut FunctionContext::new(self.context, program, func, function);
 
+        // Generates function definition.
+        // for C
+        let mut arg_tys = self.c_argument_types(func)?;
+        arg_tys.push(self.c_run_handle_type());
+        let args_line = self.c_define_args(&arg_tys);
+        let ret_ty = self.c_type(&func.return_type)?.to_string();
+        let function = &self.c_functions[&func.id];
+        context.body.add(format!("{ret_ty} {fun}({args})",
+            ret_ty=ret_ty,
+            fun=function,
+            args=args_line,
+        ));
+        context.body.add("{");
+
+        // Generates function body.
+        // for LLVM
         // Create the entry basic block, where we define alloca'd variables.
         let entry_bb =
             LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!(""));
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
 
+        // for C and LLVM
         self.gen_allocas(context)?;
         self.gen_store_parameters(context)?;
         self.gen_basic_block_defs(context)?;
@@ -1670,8 +1674,8 @@ impl CGenerator {
             self.gen_terminator(context, &bb, None)?;
         }
         // Write the function defined in C into the program.
+        context.body.add("}");
         (*self.ccontext()).body_code.add(context.body.result());
-        (*self.ccontext()).body_code.add("}");
         Ok(())
     }
 

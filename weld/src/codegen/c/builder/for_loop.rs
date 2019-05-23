@@ -101,16 +101,16 @@ impl ForLoopGenInternal for CGenerator {
     ) -> WeldResult<()> {
         let iterations = self.gen_bounds_check(ctx, parfor)?;
 
-        // for C
-        ctx.body.add("#error ParallelFor is not implemented yet");
-
-        // for LLVM
         let sir_function = &ctx.sir_program.funcs[parfor.body];
         assert!(sir_function.loop_body);
 
         self.gen_loop_body_function(ctx.sir_program, sir_function, parfor)?;
         let body_function = self.functions[&parfor.body];
 
+        // for C
+        ctx.body.add("#error ParallelFor is not implemented yet");
+
+        // for LLVM
         // The parameters of the body function have symbol names that must exist in the current
         // context.
         let mut arguments = vec![];
@@ -259,6 +259,7 @@ impl ForLoopGenInternal for CGenerator {
         assert_eq!(builders.len(), 1);
         let weld_ty = &builders[0];
 
+        // for LLVM
         let mut arg_tys = self.argument_types(func)?;
         // The second-to-last argument is the *total* number of iterations across all threads (in a
         // multi-threaded setting) that this loop will execute for.
@@ -284,6 +285,28 @@ impl ForLoopGenInternal for CGenerator {
 
         // Create a context for the function.
         let context = &mut FunctionContext::new(self.context, program, func, function);
+
+        // Generate function definition.
+        // for C
+        let mut c_arg_tys = self.c_argument_types(func)?;
+        // The second-to-last argument is the *total* number of iterations across all threads (in a
+        // multi-threaded setting) that this loop will execute for.
+        c_arg_tys.push(self.c_i64_type());
+        let num_iterations_index = (c_arg_tys.len() - 1) as u32;
+        // Last argument is run handle, as always.
+        c_arg_tys.push(self.c_run_handle_type());
+
+        let c_ret_ty = &self.c_type(weld_ty)?;
+        let name = format!("f{}_loop", func.id);
+        let args_line = self.c_define_args(&c_arg_tys);
+        context.body.add(format!(
+            "{} {} {}({})",
+            "static inline",            // add inline like what LLVM specifies
+            c_ret_ty,
+            name,
+            args_line,
+        ));
+        context.body.add("{");
         // Reference to the parameter storing the max number of iterations.
         let max = LLVMGetParam(context.llvm_function, num_iterations_index);
         // Create the entry basic block, where we define alloca'd variables.
@@ -387,6 +410,8 @@ impl ForLoopGenInternal for CGenerator {
         let updated_builder =
             self.load(context.builder, context.get_value(&parfor.builder_arg)?)?;
         LLVMBuildRet(context.builder, updated_builder);
+        context.body.add("}");
+        (*self.ccontext()).prelude_code.add(context.body.result());
         Ok(())
     }
 
