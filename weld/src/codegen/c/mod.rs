@@ -1686,14 +1686,23 @@ impl CGenerator {
                 Ok(())
             }
             AssignLiteral(_) => {
+                // for C
+                context.body.add("#error AssignLiteral is not implemented yet");
+
                 use self::numeric::NumericExpressionGen;
                 self.gen_assign_literal(context, statement)
             }
             BinOp { .. } => {
+                // for C
+                context.body.add("#error BinOp is not implemented yet");
+
                 use self::numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
             }
             Broadcast(ref child) => {
+                // for C
+                context.body.add("#error Broadcast is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
@@ -1711,6 +1720,9 @@ impl CGenerator {
                 Ok(())
             }
             Cast(_, _) => {
+                // for C
+                context.body.add("#error Cast is not implemented yet");
+
                 use self::numeric::NumericExpressionGen;
                 self.gen_cast(context, statement)
             }
@@ -1718,6 +1730,9 @@ impl CGenerator {
                 ref symbol_name,
                 ref args,
             } => {
+                // for C
+                context.body.add("#error CUDF is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let return_ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
                 let mut arg_tys = vec![];
@@ -1747,10 +1762,16 @@ impl CGenerator {
                 Ok(())
             }
             Deserialize(_) => {
+                // for C
+                context.body.add("#error Desirialize is not implemented yet");
+
                 use self::serde::SerDeGen;
                 self.gen_deserialize(context, statement)
             }
             GetField { ref value, index } => {
+                // for C
+                context.body.add("#error GetField is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let value_pointer = context.get_value(value)?;
                 let elem_pointer =
@@ -1760,6 +1781,9 @@ impl CGenerator {
                 Ok(())
             }
             KeyExists { ref child, ref key } => {
+                // for C
+                context.body.add("#error KeyExists is not implemented yet");
+
                 use self::hash::GenHash;
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
@@ -1819,6 +1843,9 @@ impl CGenerator {
                 ref child,
                 ref index,
             } => {
+                // for C
+                context.body.add("#error Lookup is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
@@ -1857,6 +1884,9 @@ impl CGenerator {
                 ref child,
                 ref index,
             } => {
+                // for C
+                context.body.add("#error OptLookup is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
@@ -1896,6 +1926,9 @@ impl CGenerator {
                 }
             }
             MakeStruct(ref elems) => {
+                // for C
+                context.body.add("#error MakeStruct is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 for (i, elem) in elems.iter().enumerate() {
                     let elem_pointer =
@@ -1906,6 +1939,9 @@ impl CGenerator {
                 Ok(())
             }
             MakeVector(ref elems) => {
+                // for C
+                context.body.add("#error MakeVector is not implemented yet");
+
                 use self::vector::VectorExt;
                 let output_pointer = context.get_value(output)?;
                 let output_type = context.sir_function.symbol_type(output)?;
@@ -1921,18 +1957,30 @@ impl CGenerator {
                 Ok(())
             }
             Merge { .. } => {
+                // for C
+                context.body.add("#error merge is not implemented yet");
+
                 use self::builder::BuilderExpressionGen;
                 self.gen_merge(context, statement)
             }
             Negate(_) => {
+                // for C
+                context.body.add("#error Negate is not implemented yet");
+
                 use self::numeric::NumericExpressionGen;
                 self.gen_negate(context, statement)
             }
             Not(_) => {
+                // for C
+                context.body.add("#error Not is not implemented yet");
+
                 use self::numeric::NumericExpressionGen;
                 self.gen_not(context, statement)
             }
             Assert(ref cond) => {
+                // for C
+                context.body.add("#error Assert is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
                 let result = self.intrinsics.call_weld_run_assert(
@@ -1946,14 +1994,23 @@ impl CGenerator {
                 Ok(())
             }
             NewBuilder { .. } => {
+                // for C
+                context.body.add("#error NewBuilder is not implemented yet");
+
                 use self::builder::BuilderExpressionGen;
                 self.gen_new_builder(context, statement)
             }
             ParallelFor(_) => {
+                // for C
+                context.body.add("#error ParallelFor is not implemented yet");
+
                 use self::builder::BuilderExpressionGen;
                 self.gen_for(context, statement)
             }
             Res(_) => {
+                // for C
+                context.body.add("#error Res is not implemented yet");
+
                 use self::builder::BuilderExpressionGen;
                 self.gen_result(context, statement)
             }
@@ -1962,6 +2019,9 @@ impl CGenerator {
                 ref on_true,
                 ref on_false,
             } => {
+                // for C
+                context.body.add("#error Select is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
                 let cond = self.bool_to_i1(context.builder, cond);
@@ -2000,6 +2060,9 @@ impl CGenerator {
                 ref child,
                 ref cmpfunc,
             } => {
+                // for C
+                context.body.add("#error Sort is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let output_type = context
                     .sir_function
@@ -2080,6 +2143,9 @@ impl CGenerator {
                 }
             }
             ToVec(ref child) => {
+                // for C
+                context.body.add("#error ToVec is not implemented yet");
+
                 let output_pointer = context.get_value(output)?;
                 let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
@@ -2109,6 +2175,9 @@ impl CGenerator {
                 Ok(())
             }
             UnaryOp { .. } => {
+                // for C
+                context.body.add("#error UnaryOp is not implemented yet");
+
                 use self::numeric::NumericExpressionGen;
                 self.gen_unaryop(context, statement)
             }
@@ -2144,6 +2213,9 @@ impl CGenerator {
         use crate::sir::Terminator::*;
         match bb.terminator {
             ProgramReturn(ref sym) => {
+                // for C
+                context.body.add("#error ProgramReturn is not implemented yet");
+
                 let value = self.load(context.builder, context.get_value(sym)?)?;
                 let run = context.get_run();
                 let ty = LLVMTypeOf(value);
@@ -2164,6 +2236,9 @@ impl CGenerator {
                 ref on_true,
                 ref on_false,
             } => {
+                // for C
+                context.body.add("#error Branch is not implemented yet");
+
                 let cond = self.load(context.builder, context.get_value(cond)?)?;
                 let cond = self.bool_to_i1(context.builder, cond);
                 let _ = LLVMBuildCondBr(
@@ -2174,9 +2249,15 @@ impl CGenerator {
                 );
             }
             JumpBlock(ref id) => {
+                // for C
+                context.body.add("#error JumpBlock is not implemented yet");
+
                 LLVMBuildBr(context.builder, context.get_block(*id)?);
             }
             EndFunction(ref sym) => {
+                // for C
+                context.body.add("#error EndFunction is not implemented yet");
+
                 if let Some((jumpto, loop_builder)) = loop_terminator {
                     let pointer = context.get_value(sym)?;
                     let updated_builder = self.load(context.builder, pointer)?;
@@ -2189,6 +2270,9 @@ impl CGenerator {
                 }
             }
             Crash => {
+                // for C
+                context.body.add("#error Crash is not implemented yet");
+
                 use crate::runtime::WeldRuntimeErrno;
                 let errno = self.i64(WeldRuntimeErrno::Unknown as i64);
                 self.intrinsics.call_weld_run_set_errno(
