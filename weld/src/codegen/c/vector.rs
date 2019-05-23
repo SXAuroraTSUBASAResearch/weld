@@ -61,6 +61,13 @@ pub trait VectorExt {
         vec: LLVMValueRef,
         index: LLVMValueRef,
     ) -> WeldResult<LLVMValueRef>;
+    unsafe fn c_gen_at(
+        &mut self,
+        builder: LLVMBuilderRef,
+        vector_type: &Type,
+        vec: &str,
+        index: &str,
+    ) -> WeldResult<String>;
     unsafe fn gen_vat(
         &mut self,
         builder: LLVMBuilderRef,
@@ -131,6 +138,21 @@ impl VectorExt for CGenerator {
         if let Type::Vector(ref elem_type) = *vector_type {
             let methods = self.vectors.get_mut(elem_type).unwrap();
             methods.gen_at(builder, vector, index)
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn c_gen_at(
+        &mut self,
+        builder: LLVMBuilderRef,
+        vector_type: &Type,
+        vector: &str,
+        index: &str,
+    ) -> WeldResult<String> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.c_gen_at(builder, vector, index)
         } else {
             unreachable!()
         }
@@ -409,25 +431,38 @@ impl Vector {
         ))
     }
 
-    /// Generates the `at` method on vectors and calls it.
+    /// Generates the `at` method on vectors.
     ///
     /// This method performs an index computation into the vector.  The function returns a pointer
     /// to the requested index: it does not dereference the pointer.
-    pub unsafe fn gen_at(
+    pub unsafe fn define_at(
         &mut self,
-        builder: LLVMBuilderRef,
-        vector: LLVMValueRef,
-        index: LLVMValueRef,
-    ) -> WeldResult<LLVMValueRef> {
+    ) {
         if self.at.is_none() {
             let mut arg_tys = [self.vector_ty, self.i64_type()];
             let ret_ty = LLVMPointerType(self.elem_ty, 0);
-            let c_arg_tys = [self.name.clone(), self.c_i64_type()];
+            let c_arg_tys = [
+                // Use pointer of vector insteaf of vector.
+                self.c_pointer_type(&self.name),
+                self.c_u64_type(),
+            ];
             let c_ret_ty = &self.c_pointer_type(&self.c_elem_ty);
 
-            let name = format!("{}.at", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let name = format!("{}_at", self.name);
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
 
+            // for C
+            c_code.add("{");
+            c_code.add(format!(
+                "return &{}->data[{}];",
+                self.c_get_param(0),
+                self.c_get_param(1),
+            ));
+            c_code.add("}");
+            (*self.ccontext()).prelude_code.add(c_code.result());
+            self.c_at = name;
+
+            // for LLVM
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
             let vector = LLVMGetParam(function, 0);
@@ -439,6 +474,20 @@ impl Vector {
             self.at = Some(function);
             LLVMDisposeBuilder(builder);
         }
+    }
+    /// Generates the `at` method on vectors and calls it.
+    ///
+    /// This method performs an index computation into the vector.  The function returns a pointer
+    /// to the requested index: it does not dereference the pointer.
+    pub unsafe fn gen_at(
+        &mut self,
+        builder: LLVMBuilderRef,
+        vector: LLVMValueRef,
+        index: LLVMValueRef,
+    ) -> WeldResult<LLVMValueRef> {
+        if self.at.is_none() {
+            self.define_at();
+        }
 
         let mut args = [vector, index];
         Ok(LLVMBuildCall(
@@ -449,6 +498,19 @@ impl Vector {
             c_str!(""),
         ))
     }
+    pub unsafe fn c_gen_at(
+        &mut self,
+        _builder: LLVMBuilderRef,
+        vector: &str,
+        index: &str,
+    ) -> WeldResult<String> {
+        if self.at.is_none() {
+            self.define_at();
+        }
+
+        Ok(format!("{}(&{}, {});", self.c_at, vector, index))
+    }
+
 
     /// Generate the `slice` method on vectors and calls it.
     ///
@@ -556,7 +618,10 @@ impl Vector {
             // Generate size function only once.
             let mut arg_tys = [self.vector_ty];
             let ret_ty = self.u64_type();
-            let c_arg_tys = [self.c_pointer_type(&self.name)];
+            let c_arg_tys = [
+                // Use pointer of vector insteaf of vector.
+                self.c_pointer_type(&self.name),
+            ];
             let c_ret_ty = &self.c_u64_type();
 
             // Use C name.

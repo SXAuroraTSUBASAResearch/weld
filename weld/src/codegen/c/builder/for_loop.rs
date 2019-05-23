@@ -86,7 +86,9 @@ pub trait ForLoopGenInternal {
         &mut self,
         ctx: &mut FunctionContext<'_>,
         i: LLVMValueRef,
+        c_i: &str,
         e: LLVMValueRef,
+        c_e: &str,
         parfor: &ParallelForData,
     ) -> WeldResult<()>;
 }
@@ -292,7 +294,7 @@ impl ForLoopGenInternal for CGenerator {
         // The second-to-last argument is the *total* number of iterations across all threads (in a
         // multi-threaded setting) that this loop will execute for.
         c_arg_tys.push(self.c_i64_type());
-        let num_iterations_index = (c_arg_tys.len() - 1) as u32;
+        let c_num_iterations_index = c_arg_tys.len() - 1;
         // Last argument is run handle, as always.
         c_arg_tys.push(self.c_run_handle_type());
 
@@ -309,6 +311,7 @@ impl ForLoopGenInternal for CGenerator {
         context.body.add("{");
         // Reference to the parameter storing the max number of iterations.
         let max = LLVMGetParam(context.llvm_function, num_iterations_index);
+        let c_max = self.c_get_param(c_num_iterations_index);
         // Create the entry basic block, where we define alloca'd variables.
         let entry_bb =
             LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!(""));
@@ -318,6 +321,21 @@ impl ForLoopGenInternal for CGenerator {
         self.gen_store_parameters(context)?;
 
         // Store the loop induction variable and the builder argument.
+        // for C
+        context.body.add(format!(
+            "{} = {};",
+            context.c_get_value(&parfor.builder_arg)?,
+            context.c_get_value(&parfor.builder)?,
+        ));
+        let c_idx = context.c_get_value(&parfor.idx_arg)?;
+        context.body.add(format!(
+            "for ({} = 0; {} != {}; ++{}) {{",
+            c_idx,
+            c_idx,
+            c_max,
+            c_idx,
+        ));
+        // for LLVM
         LLVMBuildStore(
             context.builder,
             self.load(context.builder, context.get_value(&parfor.builder)?)?,
@@ -360,13 +378,21 @@ impl ForLoopGenInternal for CGenerator {
 
         // Load the loop element.
         let i = self.load(context.builder, context.get_value(&parfor.idx_arg)?)?;
+        let c_i = &context.c_get_value(&parfor.idx_arg)?;
         let e = context.get_value(&parfor.data_arg)?;
-        self.gen_loop_element(context, i, e, parfor)?;
+        let c_e = &context.c_get_value(&parfor.data_arg)?;
+        self.gen_loop_element(context, i, c_i, e, c_e, parfor)?;
 
         // Generate the body - this resembles the usual SIR function generation, but we pass a
         // basic block ID to gen_terminator to change the `EndFunction` terminators to a basic
         // block jump to the end of the loop.
         for bb in func.blocks.iter() {
+            // for C
+            context.body.add(format!(
+                "{}:",
+                context.c_get_block(bb.id),
+            ));
+            // for LLVM
             LLVMPositionBuilderAtEnd(context.builder, context.get_block(bb.id)?);
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement)?;
@@ -404,12 +430,18 @@ impl ForLoopGenInternal for CGenerator {
             loop_exit_bb,
             first_body_block,
         );
+        context.body.add("}");
 
         // The last basic block loads the updated builder and returns it.
         LLVMPositionBuilderAtEnd(context.builder, loop_exit_bb);
         let updated_builder =
             self.load(context.builder, context.get_value(&parfor.builder_arg)?)?;
         LLVMBuildRet(context.builder, updated_builder);
+        context.body.add(format!(
+            "return {};",
+            context.c_get_value(&parfor.builder_arg)?,
+        ));
+
         context.body.add("}");
         (*self.ccontext()).prelude_code.add(context.body.result());
         Ok(())
@@ -419,13 +451,22 @@ impl ForLoopGenInternal for CGenerator {
         &mut self,
         ctx: &mut FunctionContext<'_>,
         i: LLVMValueRef,
+        c_i: &str,
         e: LLVMValueRef,
+        c_e: &str,
         parfor: &ParallelForData,
     ) -> WeldResult<()> {
         let mut values = vec![];
+        let mut c_values = vec![];
         for iter in parfor.data.iter() {
             match iter.kind {
                 ScalarIter if iter.start.is_some() => {
+                    // for C
+                    ctx.body.add(format!(
+                        "#error gen_loop_element for Part of ScalarIter {} is not implemented yet",
+                        ctx.c_get_value(&iter.data)?,
+                    ));
+                    // for LLVM
                     let start =
                         self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
                     let stride =
@@ -442,6 +483,24 @@ impl ForLoopGenInternal for CGenerator {
                     values.push(element);
                 }
                 ScalarIter => {
+                    // for C
+                    let vector = &ctx.c_get_value(&iter.data)?;
+                    let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
+                    let element_pointer = self.c_gen_at(
+                        ctx.builder, vector_type, vector, c_i)?;
+                    let element = ctx.var_ids.next();
+                    if let Type::Vector(elem_type) = vector_type {
+                        ctx.body.add(format!(
+                            "{} {} = *{};",
+                            elem_type,
+                            element,
+                            element_pointer,
+                        ));
+                    } else {
+                        unreachable!()
+                    }
+                    c_values.push(element);
+                    // for LLVM
                     // Iterates over the full vector: Index = i.
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
@@ -451,6 +510,12 @@ impl ForLoopGenInternal for CGenerator {
                 }
                 SimdIter if iter.start.is_some() => unreachable!(),
                 SimdIter => {
+                    // for C
+                    ctx.body.add(format!(
+                        "#error gen_loop_element for SimdIter {} is not implemented yet",
+                        ctx.c_get_value(&iter.data)?,
+                    ));
+                    // for LLVM
                     let i = LLVMBuildNSWMul(
                         ctx.builder,
                         i,
@@ -465,6 +530,12 @@ impl ForLoopGenInternal for CGenerator {
                 }
                 FringeIter if iter.start.is_some() => unreachable!(),
                 FringeIter => {
+                    // for C
+                    ctx.body.add(format!(
+                        "#error gen_loop_element for FringeIter {} is not implemented yet",
+                        ctx.c_get_value(&iter.data)?,
+                    ));
+                    // for LLVM
                     let vector = self.load(ctx.builder, ctx.get_value(&iter.data)?)?;
                     let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
                     let size = self.gen_size(ctx.builder, vector_type, vector)?;
@@ -485,6 +556,12 @@ impl ForLoopGenInternal for CGenerator {
                     values.push(element);
                 }
                 RangeIter => {
+                    // for C
+                    ctx.body.add(format!(
+                        "#error gen_loop_element for RangeIter {} is not implemented yet",
+                        ctx.c_get_value(&iter.data)?,
+                    ));
+                    // for LLVM
                     let start =
                         self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
                     let stride =
@@ -509,6 +586,22 @@ impl ForLoopGenInternal for CGenerator {
         } else {
             LLVMBuildStore(ctx.builder, values[0], e);
         }
+        if c_values.len() > 1 {
+            for (i, value) in c_values.into_iter().enumerate() {
+                ctx.body.add(format!(
+                    "{}->f{} = {};",
+                    c_e,
+                    i,
+                    value,
+                ));
+            }
+        } else {
+            ctx.body.add(format!(
+                "{} = {};",
+                c_e,
+                c_values[0],
+            ));
+        }
         Ok(())
     }
 
@@ -524,6 +617,12 @@ impl ForLoopGenInternal for CGenerator {
         let size = self.gen_size(ctx.builder, vector_type, vector)?;
         match iter.kind {
             ScalarIter if iter.start.is_some() => {
+                // for C
+                ctx.body.add(format!(
+                    "#error gen_iter_bounds_check for Part of ScalarIter {} is not implemented yet",
+                    ctx.c_get_value(&iter.data)?,
+                ));
+                // for LLVM
                 use self::llvm_sys::LLVMIntPredicate::{LLVMIntEQ, LLVMIntSLE, LLVMIntSLT};
                 let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
                 let stride =
@@ -560,6 +659,12 @@ impl ForLoopGenInternal for CGenerator {
                 Ok(iterations)
             }
             ScalarIter => {
+                // for C
+                ctx.body.add(format!(
+                    "#error gen_iter_bounds_check for Full of ScalarIter {} is not implemented yet",
+                    ctx.c_get_value(&iter.data)?,
+                ));
+                // for LLVM
                 // The number of iterations is the size of the vector. No explicit bounds check is
                 // necessary here.
                 let _ = LLVMBuildBr(ctx.builder, pass_block);
@@ -567,6 +672,12 @@ impl ForLoopGenInternal for CGenerator {
             }
             SimdIter if iter.start.is_some() => unreachable!(),
             SimdIter => {
+                // for C
+                ctx.body.add(format!(
+                    "#error gen_iter_bounds_check for SimdIter {} is not implemented yet",
+                    ctx.c_get_value(&iter.data)?,
+                ));
+                // for LLVM
                 let iterations = LLVMBuildSDiv(
                     ctx.builder,
                     size,
@@ -578,6 +689,12 @@ impl ForLoopGenInternal for CGenerator {
             }
             FringeIter if iter.start.is_some() => unreachable!(),
             FringeIter => {
+                // for C
+                ctx.body.add(format!(
+                    "#error gen_iter_bounds_check for FringeIter {} is not implemented yet",
+                    ctx.c_get_value(&iter.data)?,
+                ));
+                // for LLVM
                 let iterations = LLVMBuildSRem(
                     ctx.builder,
                     size,
@@ -588,6 +705,12 @@ impl ForLoopGenInternal for CGenerator {
                 Ok(iterations)
             }
             RangeIter => {
+                // for C
+                ctx.body.add(format!(
+                    "#error gen_iter_bounds_check for RangeIter {} is not implemented yet",
+                    ctx.c_get_value(&iter.data)?,
+                ));
+                // for LLVM
                 use self::llvm_sys::LLVMIntPredicate::{LLVMIntEQ, LLVMIntSLT};
                 let start = self.load(ctx.builder, ctx.get_value(iter.start.as_ref().unwrap())?)?;
                 let stride =

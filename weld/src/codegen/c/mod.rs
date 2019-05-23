@@ -1653,7 +1653,7 @@ impl CGenerator {
         // for C
         context.body.add(format!(
             "goto {};",
-            context.get_c_block(func.blocks[0].id),
+            context.c_get_block(func.blocks[0].id),
         ));
         // for LLVM
         LLVMPositionBuilderAtEnd(context.builder, entry_bb);
@@ -1664,7 +1664,7 @@ impl CGenerator {
             // for C
             context.body.add(format!(
                 "{}:",
-                context.get_c_block(func.blocks[0].id),
+                context.c_get_block(func.blocks[0].id),
             ));
             // for LLVM
             LLVMPositionBuilderAtEnd(context.builder, context.get_block(bb.id)?);
@@ -2651,7 +2651,7 @@ impl<'a> FunctionContext<'a> {
             .cloned()
             .ok_or_else(|| WeldCompileError::new("Undefined basic block in function codegen"))
     }
-    pub fn get_c_block(&self, id: BasicBlockId) -> String {
+    pub fn c_get_block(&self, id: BasicBlockId) -> String {
         format!("b{}", id)
     }
 
