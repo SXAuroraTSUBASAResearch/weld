@@ -138,12 +138,12 @@ impl Appender {
     ) -> WeldResult<LLVMValueRef> {
         if self.new.is_none() {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
-            let mut c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
+            let c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
             let ret_ty = self.appender_ty;
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.new", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             let capacity = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
@@ -207,14 +207,14 @@ impl Appender {
             merge_ty,
             self.run_handle_type(),
         ];
-        let mut c_arg_tys = [
-            &self.pointer_c_type(&self.name),
-            &c_merge_ty,
+        let c_arg_tys = [
+            self.pointer_c_type(&self.name),
+            c_merge_ty,
             self.run_handle_c_type(),
         ];
         let ret_ty = LLVMVoidTypeInContext(self.context);
-        let c_ret_ty = self.void_c_type();
-        let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+        let c_ret_ty = &self.void_c_type();
+        let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
 
@@ -342,11 +342,11 @@ impl Appender {
         use crate::codegen::c::vector;
         if self.result.is_none() {
             let mut arg_tys = [LLVMPointerType(self.appender_ty, 0)];
-            let mut c_arg_tys = [&self.pointer_c_type(&self.name) as &str];
+            let c_arg_tys = [self.pointer_c_type(&self.name)];
             let ret_ty = vector_ty;
-            let c_ret_ty = c_vector_ty;
+            let c_ret_ty = &c_vector_ty;
             let name = format!("{}.result", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             let appender = LLVMGetParam(function, 0);
 

@@ -275,11 +275,11 @@ impl Vector {
         if self.new.is_none() {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
             let ret_ty = self.vector_ty;
-            let mut c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
+            let c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.new", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             let size = LLVMGetParam(function, 0);
             let elem_size = self.size_of(self.elem_ty);
@@ -325,11 +325,11 @@ impl Vector {
         if self.clone.is_none() {
             let mut arg_tys = [self.vector_ty, self.run_handle_type()];
             let ret_ty = self.vector_ty;
-            let mut c_arg_tys = [&self.name.clone(), self.run_handle_c_type()];
+            let c_arg_tys = [self.name.clone(), self.run_handle_c_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.clone", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             let vector = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
@@ -388,11 +388,11 @@ impl Vector {
         if self.at.is_none() {
             let mut arg_tys = [self.vector_ty, self.i64_type()];
             let ret_ty = LLVMPointerType(self.elem_ty, 0);
-            let mut c_arg_tys = [&self.name.clone(), self.i64_c_type()];
-            let c_ret_ty = &format!("{}*", self.c_elem_ty);
+            let c_arg_tys = [self.name.clone(), self.i64_c_type()];
+            let c_ret_ty = &self.pointer_c_type(&self.c_elem_ty);
 
             let name = format!("{}.at", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
@@ -432,11 +432,11 @@ impl Vector {
         if self.slice.is_none() {
             let mut arg_tys = [self.vector_ty, self.i64_type(), self.i64_type()];
             let ret_ty = self.vector_ty;
-            let mut c_arg_tys = [&self.name.clone(), self.i64_c_type(), self.i64_c_type()];
+            let c_arg_tys = [self.name.clone(), self.i64_c_type(), self.i64_c_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.slice", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             let vector = LLVMGetParam(function, 0);
             let index = LLVMGetParam(function, 1);
@@ -485,11 +485,11 @@ impl Vector {
         if self.vat.is_none() {
             let mut arg_tys = [self.vector_ty, self.i64_type()];
             let ret_ty = LLVMPointerType(LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH), 0);
-            let mut c_arg_tys = [&self.name.clone(), self.i64_c_type()];
+            let c_arg_tys = [self.name.clone(), self.i64_c_type()];
             let c_ret_ty = &self.pointer_c_type(&self.simd_c_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH));
 
             let name = format!("{}.vat", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
@@ -526,14 +526,14 @@ impl Vector {
             // Generate size function only once.
             let mut arg_tys = [self.vector_ty];
             let ret_ty = self.i64_type();
-            let mut c_arg_tys = [&self.name.clone() as &str];
-            let c_ret_ty = self.i64_c_type();
+            let c_arg_tys = [self.name.clone()];
+            let c_ret_ty = &self.i64_c_type();
 
             // for C
             let name = format!("{}_size", self.name);
             // for LLVM
             let name = format!("{}.size", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
@@ -575,11 +575,11 @@ impl Vector {
             trace!("Generated extend");
             let mut arg_tys = [self.vector_ty, self.i64_type(), self.run_handle_type()];
             let ret_ty = self.vector_ty;
-            let mut c_arg_tys = [&self.name.clone(), self.i64_c_type(), self.run_handle_c_type()];
+            let c_arg_tys = [self.name.clone(), self.i64_c_type(), self.run_handle_c_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.extend", self.name);
-            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             let realloc_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
             let finish_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));

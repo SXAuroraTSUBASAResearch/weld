@@ -301,119 +301,119 @@ typedef struct {{
 /// For instructions that require `i1` (e.g, conditional branching or select), the caller
 /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
 /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
-unsafe fn bool_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn bool_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&Bool) {
         (*ccontext).prelude_code.add("typedef char bool;");
         (*ccontext).basic_types.insert(Bool, "bool".to_string());
     }
-    (*ccontext).basic_types.get(&Bool).unwrap()
+    (*ccontext).basic_types.get(&Bool).unwrap().to_string()
 }
 
-unsafe fn i1_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn i1_c_type(ccontext: CContextRef) -> String {
     if !(*ccontext).i1_defined {
         (*ccontext).prelude_code.add("typedef char i1;");
         (*ccontext).i1_defined = true;
     }
-    "i1"
+    "i1".to_string()
 }
 
-unsafe fn i8_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn i8_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I8) {
         (*ccontext).prelude_code.add("typedef char i8;");
         (*ccontext).basic_types.insert(I8, "i8".to_string());
     }
-    (*ccontext).basic_types.get(&I8).unwrap()
+    (*ccontext).basic_types.get(&I8).unwrap().to_string()
 }
 
-unsafe fn u8_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn u8_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U8) {
         (*ccontext).prelude_code.add("typedef unsigned char u8;");
         (*ccontext).basic_types.insert(U8, "u8".to_string());
     }
-    (*ccontext).basic_types.get(&U8).unwrap()
+    (*ccontext).basic_types.get(&U8).unwrap().to_string()
 }
 
-unsafe fn i16_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn i16_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I16) {
         (*ccontext).prelude_code.add("typedef short i16;");
         (*ccontext).basic_types.insert(I16, "i16".to_string());
     }
-    (*ccontext).basic_types.get(&I16).unwrap()
+    (*ccontext).basic_types.get(&I16).unwrap().to_string()
 }
 
-unsafe fn u16_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn u16_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U16) {
         (*ccontext).prelude_code.add("typedef unsigned short u16;");
         (*ccontext).basic_types.insert(U16, "u16".to_string());
     }
-    (*ccontext).basic_types.get(&U16).unwrap()
+    (*ccontext).basic_types.get(&U16).unwrap().to_string()
 }
 
-unsafe fn i32_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn i32_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I32) {
         (*ccontext).prelude_code.add("typedef int i32;");
         (*ccontext).basic_types.insert(I32, "i32".to_string());
     }
-    (*ccontext).basic_types.get(&I32).unwrap()
+    (*ccontext).basic_types.get(&I32).unwrap().to_string()
 }
 
-unsafe fn u32_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn u32_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U32) {
         (*ccontext).prelude_code.add("typedef unsigned int u32;");
         (*ccontext).basic_types.insert(U32, "u32".to_string());
     }
-    (*ccontext).basic_types.get(&U32).unwrap()
+    (*ccontext).basic_types.get(&U32).unwrap().to_string()
 }
 
-unsafe fn i64_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn i64_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I64) {
         (*ccontext).prelude_code.add("typedef long i64;");
         (*ccontext).basic_types.insert(I64, "i64".to_string());
     }
-    (*ccontext).basic_types.get(&I64).unwrap()
+    (*ccontext).basic_types.get(&I64).unwrap().to_string()
 }
 
-unsafe fn u64_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn u64_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U64) {
         (*ccontext).prelude_code.add("typedef unsigned long u64;");
         (*ccontext).basic_types.insert(U64, "u64".to_string());
     }
-    (*ccontext).basic_types.get(&U64).unwrap()
+    (*ccontext).basic_types.get(&U64).unwrap().to_string()
 }
 
-unsafe fn f32_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn f32_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&F32) {
         (*ccontext).prelude_code.add("typedef float f32;");
         (*ccontext).basic_types.insert(F32, "f32".to_string());
     }
-    (*ccontext).basic_types.get(&F32).unwrap()
+    (*ccontext).basic_types.get(&F32).unwrap().to_string()
 }
 
-unsafe fn f64_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn f64_c_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&F64) {
         (*ccontext).prelude_code.add("typedef double f64;");
         (*ccontext).basic_types.insert(F64, "f64".to_string());
     }
-    (*ccontext).basic_types.get(&F64).unwrap()
+    (*ccontext).basic_types.get(&F64).unwrap().to_string()
 }
 
-unsafe fn void_c_type(_ccontext: CContextRef) -> &'static str {
-    "void"
+unsafe fn void_c_type(_ccontext: CContextRef) -> String {
+    "void".to_string()
 }
 
-unsafe fn void_pointer_c_type(_ccontext: CContextRef) -> &'static str {
-    "void*"
+unsafe fn void_pointer_c_type(_ccontext: CContextRef) -> String {
+    "void*".to_string()
 }
 
 unsafe fn pointer_c_type(_ccontext: CContextRef, ty: &str) -> String {
@@ -424,13 +424,13 @@ unsafe fn simd_c_type(_ccontext: CContextRef, ty: &str, size: u32) -> String {
     format!("simd_{}_{}", ty, size)
 }
 
-unsafe fn run_handle_c_type(ccontext: CContextRef) -> &'static str {
+unsafe fn run_handle_c_type(ccontext: CContextRef) -> String {
     if !(*ccontext).run_handle_defined {
         (*ccontext).prelude_code.add(
             "typedef struct { char f; } RunHandle;");
         (*ccontext).run_handle_defined = true;
     }
-    "RunHandle*"
+    "RunHandle*".to_string()
 }
 
 /// Specifies whether a type contains a pointer in generated code.
@@ -621,7 +621,7 @@ pub trait CodeGenExt {
     unsafe fn hash_type(&self) -> LLVMTypeRef {
         self.i32_type()
     }
-    unsafe fn hash_c_type(&self) -> &'static str {
+    unsafe fn hash_c_type(&self) -> String {
         self.i32_c_type()
     }
 
@@ -647,7 +647,7 @@ pub trait CodeGenExt {
         ret_ty: LLVMTypeRef,
         c_ret_ty: &str,
         arg_tys: &mut [LLVMTypeRef],
-        c_arg_tys: &mut [&str],
+        c_arg_tys: &[String],
         name: T,
     ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef, CodeBuilder) {
         self.define_function_with_visibility(
@@ -669,13 +669,13 @@ pub trait CodeGenExt {
         ret_ty: LLVMTypeRef,
         c_ret_ty: &str,
         arg_tys: &mut [LLVMTypeRef],
-        c_arg_tys: &mut [&str],
+        c_arg_tys: &[String],
         visibility: LLVMLinkage,
         name: T,
     ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef, CodeBuilder) {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         // for C
-        let code = CodeBuilder::new();
+        let mut code = CodeBuilder::new();
         code.add(format!(
             "{ret_ty} {fun}({args})",
             ret_ty=c_ret_ty,
@@ -857,59 +857,59 @@ pub trait CodeGenExt {
     /// For instructions that require `i1` (e.g, conditional branching or select), the caller
     /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
     /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
-    unsafe fn bool_c_type(&self) -> &'static str {
+    unsafe fn bool_c_type(&self) -> String {
         bool_c_type(self.ccontext())
     }
 
-    unsafe fn i1_c_type(&self) -> &'static str {
+    unsafe fn i1_c_type(&self) -> String {
         i1_c_type(self.ccontext())
     }
 
-    unsafe fn i8_c_type(&self) -> &'static str {
+    unsafe fn i8_c_type(&self) -> String {
         i8_c_type(self.ccontext())
     }
 
-    unsafe fn u8_c_type(&self) -> &'static str {
+    unsafe fn u8_c_type(&self) -> String {
         u8_c_type(self.ccontext())
     }
 
-    unsafe fn i16_c_type(&self) -> &'static str {
+    unsafe fn i16_c_type(&self) -> String {
         i16_c_type(self.ccontext())
     }
 
-    unsafe fn u16_c_type(&self) -> &'static str {
+    unsafe fn u16_c_type(&self) -> String {
         u16_c_type(self.ccontext())
     }
 
-    unsafe fn i32_c_type(&self) -> &'static str {
+    unsafe fn i32_c_type(&self) -> String {
         i32_c_type(self.ccontext())
     }
 
-    unsafe fn u32_c_type(&self) -> &'static str {
+    unsafe fn u32_c_type(&self) -> String {
         u32_c_type(self.ccontext())
     }
 
-    unsafe fn i64_c_type(&self) -> &'static str {
+    unsafe fn i64_c_type(&self) -> String {
         i64_c_type(self.ccontext())
     }
 
-    unsafe fn u64_c_type(&self) -> &'static str {
+    unsafe fn u64_c_type(&self) -> String {
         u64_c_type(self.ccontext())
     }
 
-    unsafe fn f32_c_type(&self) -> &'static str {
+    unsafe fn f32_c_type(&self) -> String {
         f32_c_type(self.ccontext())
     }
 
-    unsafe fn f64_c_type(&self) -> &'static str {
+    unsafe fn f64_c_type(&self) -> String {
         f64_c_type(self.ccontext())
     }
 
-    unsafe fn void_c_type(&self) -> &'static str {
+    unsafe fn void_c_type(&self) -> String {
         void_c_type(self.ccontext())
     }
 
-    unsafe fn void_pointer_c_type(&self) -> &'static str {
+    unsafe fn void_pointer_c_type(&self) -> String {
         void_pointer_c_type(self.ccontext())
     }
 
@@ -921,7 +921,7 @@ pub trait CodeGenExt {
         simd_c_type(self.ccontext(), ty, size)
     }
 
-    unsafe fn run_handle_c_type(&self) -> &'static str {
+    unsafe fn run_handle_c_type(&self) -> String {
         run_handle_c_type(self.ccontext())
     }
 
@@ -1439,7 +1439,7 @@ impl CGenerator {
         }
         Ok(types)
     }
-    unsafe fn c_argument_types(&mut self, func: &SirFunction) -> WeldResult<Vec<&str>> {
+    unsafe fn c_argument_types(&mut self, func: &SirFunction) -> WeldResult<Vec<String>> {
         let mut types = vec![];
         for (_, ty) in func.params.iter() {
             types.push(self.c_type(ty)?);
@@ -1459,16 +1459,18 @@ impl CGenerator {
         }
         format!("{}{}", args_line, last_arg)
     }
-    pub fn c_define_args(&mut self, arg_tys: &[&str]) -> String {
+    pub fn c_define_args(&mut self, arg_tys: &[String]) -> String {
         let mut args_line = String::new();
         let mut last_arg: &str = "";
         for (i, arg) in arg_tys.iter().enumerate() {
             if !last_arg.is_empty() {
-                args_line = format!("{}{} p{}, ", args_line, last_arg, i);
+                // Generating i-th argument at i+1 iteration
+                args_line = format!("{}{} p{}, ", args_line, last_arg, i-1);
             }
             last_arg = arg;
         }
-        format!("{}{}", args_line, last_arg)
+        // last arg is "RunHandle* run"
+        format!("{}{} run", args_line, last_arg)
     }
 
     /// Declare a function in the SIR module and track its reference.
@@ -2306,7 +2308,7 @@ impl CGenerator {
     ///
     /// This method may generate auxillary code before returning the type. For example, for complex
     /// data structures, this function may generate a definition for the data structure first.
-    unsafe fn c_type(&mut self, ty: &Type) -> WeldResult<&str> {
+    unsafe fn c_type(&mut self, ty: &Type) -> WeldResult<String> {
         use crate::ast::ScalarKind::*;
         use crate::ast::Type::*;
         let result = match *ty {
@@ -2335,7 +2337,7 @@ impl CGenerator {
                     );
                     self.dictionaries.insert(ty.clone(), dict);
                 }
-                &self.dictionaries[ty].name
+                self.dictionaries[ty].name.clone()
             }
             Scalar(kind) => match kind {
                 Bool => self.bool_c_type(),
@@ -2358,7 +2360,7 @@ impl CGenerator {
                     (*self.ccontext()).simd_types.insert(
                         kind, format!("simd_{}", self.c_type(&Scalar(kind))?));
                 }
-                (*self.ccontext()).simd_types.get(&kind).unwrap()
+                (*self.ccontext()).simd_types.get(&kind).unwrap().to_string()
             }
             Struct(ref elems) => {
                 if !self.c_struct_names.contains_key(ty) {
@@ -2373,7 +2375,7 @@ impl CGenerator {
                     (*self.ccontext()).prelude_code.add(def.result());
                     self.c_struct_names.insert(ty.clone(), name);
                 }
-                self.c_struct_names.get(ty).unwrap()
+                self.c_struct_names.get(ty).unwrap().to_string()
             }
             Vector(ref elem_type) => {
                 // Vectors are a named type, so only generate the name once.
@@ -2386,7 +2388,7 @@ impl CGenerator {
                         vector::Vector::define(name, llvm_elem_type, c_elem_type, self.context, self.module, self.ccontext());
                     self.vectors.insert(elem_type.as_ref().clone(), vector);
                 }
-                &self.vectors[elem_type].name
+                self.vectors[elem_type].name.clone()
             }
             Function(_, _) | Unknown | Alias(_, _) => unreachable!(),
         };

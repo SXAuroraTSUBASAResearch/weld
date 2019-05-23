@@ -77,7 +77,7 @@ pub trait BuilderExpressionGen {
     ) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
-    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<&str>;
+    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<String>;
 }
 
 /// Encapsulates the fields of a `NewBuilder` statement.
@@ -568,7 +568,7 @@ impl BuilderExpressionGen for CGenerator {
             unreachable!()
         }
     }
-    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<&str> {
+    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<String> {
         if let Builder(ref kind, _) = *builder {
             match *kind {
                 Appender(ref elem_type) => {
@@ -587,7 +587,7 @@ impl BuilderExpressionGen for CGenerator {
                         );
                         self.appenders.insert(kind.clone(), appender);
                     }
-                    Ok(&self.appenders[kind].name)
+                    Ok(self.appenders[kind].name.clone())
                 }
                 DictMerger(ref key, ref value, _) => {
                     let dict_type = &Dict(key.clone(), value.clone());
@@ -619,7 +619,7 @@ impl BuilderExpressionGen for CGenerator {
                         );
                         self.mergers.insert(kind.clone(), merger);
                     }
-                    Ok(&self.mergers[kind].name)
+                    Ok(self.mergers[kind].name.clone())
                 }
                 VecMerger(ref elem, _) => {
                     let vec_type = &Vector(elem.clone());

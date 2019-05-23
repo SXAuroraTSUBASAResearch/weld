@@ -94,9 +94,9 @@ impl Merger {
             let ret_ty = self.merger_ty;
             let c_ret_ty = &self.name.clone();
             let mut arg_tys = [self.elem_ty];
-            let mut c_arg_tys = [&self.c_elem_ty.clone() as &str];
+            let c_arg_tys = [self.c_elem_ty.clone()];
             let name = format!("{}.new", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             let identity = self.binop_identity(self.op, self.scalar_kind)?;
             let mut vector_elems = [identity; LLVM_VECTOR_WIDTH as usize];
@@ -136,11 +136,11 @@ impl Merger {
         &mut self,
         name: String,
         arguments: &mut [LLVMTypeRef],
-        c_arguments: &mut [&str],
+        c_arguments: &[String],
         gep_index: u32,
     ) -> WeldResult<LLVMValueRef> {
         let ret_ty = LLVMVoidTypeInContext(self.context);
-        let c_ret_ty = self.void_c_type();
+        let c_ret_ty = &self.void_c_type();
         let (function, fn_builder, _, _) = self.define_function(ret_ty, c_ret_ty, arguments, c_arguments, name);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
@@ -175,12 +175,12 @@ impl Merger {
                     LLVMPointerType(self.merger_ty, 0),
                     LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH as u32),
                 ];
-                let mut c_arg_tys = [
-                    &self.pointer_c_type(&self.name) as &str,
-                    &self.simd_c_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH as u32),
+                let c_arg_tys = [
+                    self.pointer_c_type(&self.name),
+                    self.simd_c_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH as u32),
                 ];
                 let name = format!("{}.vmerge", self.name);
-                self.vmerge = Some(self.gen_merge_internal(name, &mut arg_tys, &mut c_arg_tys, VECTOR_INDEX)?);
+                self.vmerge = Some(self.gen_merge_internal(name, &mut arg_tys, &c_arg_tys, VECTOR_INDEX)?);
             }
             let mut args = [builder, value];
             Ok(LLVMBuildCall(
@@ -193,9 +193,9 @@ impl Merger {
         } else {
             if self.merge.is_none() {
                 let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), self.elem_ty];
-                let mut c_arg_tys = [&self.pointer_c_type(&self.name) as &str, &self.c_elem_ty.clone()];
+                let c_arg_tys = [self.pointer_c_type(&self.name), self.c_elem_ty.clone()];
                 let name = format!("{}.merge", self.name);
-                self.merge = Some(self.gen_merge_internal(name, &mut arg_tys, &mut c_arg_tys, SCALAR_INDEX)?);
+                self.merge = Some(self.gen_merge_internal(name, &mut arg_tys, &c_arg_tys, SCALAR_INDEX)?);
             }
             let mut args = [builder, value];
             Ok(LLVMBuildCall(
@@ -217,9 +217,9 @@ impl Merger {
             let ret_ty = self.elem_ty;
             let c_ret_ty = &self.c_elem_ty.clone();
             let mut arg_tys = [LLVMPointerType(self.merger_ty, 0)];
-            let mut c_arg_tys = [&self.pointer_c_type(&self.name) as &str];
+            let c_arg_tys = [self.pointer_c_type(&self.name)];
             let name = format!("{}.result", self.name);
-            let (function, fn_builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &mut c_arg_tys, name);
+            let (function, fn_builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
             // Load the scalar element, apply the binary operator, and then store it back.
             let builder_pointer = LLVMGetParam(function, 0);
