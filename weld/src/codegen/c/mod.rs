@@ -1791,11 +1791,10 @@ impl CGenerator {
                     let methods = self.vectors.get_mut(elem_type).unwrap();
                     // for C
                     context.body.add(format!(
-                        "{} = {}({});",
+                        "{} = {};",
                         output,
-                        "test",
-//                        methods.gen_c_size(context.builder, child_value)?,
-                        child,
+                        methods.c_gen_size(context.builder,
+                                           &context.c_get_value(child)?)?,
                     ));
                     // for LLVM
                     let result = methods.gen_size(context.builder, child_value)?;
@@ -1803,12 +1802,7 @@ impl CGenerator {
                     Ok(())
                 } else if let Dict(_, _) = *child_type {
                     // for C
-                    context.body.add(format!(
-                        "{} = {}({});",
-                        output,
-                        "len",
-                        child,
-                    ));
+                    context.body.add("#error Length for dict is not implemented yet");
                     // for LLVM
                     let pointer = {
                         let methods = self.dictionaries.get_mut(child_type).unwrap();
@@ -2470,6 +2464,14 @@ impl<'a> FunctionContext<'a> {
         self.symbols.get(sym).cloned().ok_or_else(|| {
             WeldCompileError::new(format!("Undefined symbol {} in function codegen", sym))
         })
+    }
+
+    pub fn c_get_value(&self, sym: &Symbol) -> WeldResult<String> {
+        if let Some(_) = self.symbols.get(sym) {
+            Ok(sym.to_string())
+        } else {
+            Err(WeldCompileError::new(format!("Undefined symbol {} in function codegen", sym)))
+        }
     }
 
     /// Returns the LLVM basic block for a basic block ID in this function.

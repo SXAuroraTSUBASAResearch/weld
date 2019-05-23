@@ -74,6 +74,12 @@ pub trait VectorExt {
         vector_type: &Type,
         vec: LLVMValueRef,
     ) -> WeldResult<LLVMValueRef>;
+    unsafe fn c_gen_size(
+        &mut self,
+        builder: LLVMBuilderRef,
+        vector_type: &Type,
+        vec: &str,
+    ) -> WeldResult<String>;
     unsafe fn gen_extend(
         &mut self,
         builder: LLVMBuilderRef,
@@ -159,6 +165,20 @@ impl VectorExt for CGenerator {
         }
     }
 
+    unsafe fn c_gen_size(
+        &mut self,
+        builder: LLVMBuilderRef,
+        vector_type: &Type,
+        vector: &str,
+    ) -> WeldResult<String> {
+        if let Type::Vector(ref elem_type) = *vector_type {
+            let methods = self.vectors.get_mut(elem_type).unwrap();
+            methods.c_gen_size(builder, vector)
+        } else {
+            unreachable!()
+        }
+    }
+
     unsafe fn gen_extend(
         &mut self,
         builder: LLVMBuilderRef,
@@ -186,12 +206,19 @@ pub struct Vector {
     module: LLVMModuleRef,
     ccontext: CContextRef,
     new: Option<LLVMValueRef>,
+    c_new: Option<String>,
     clone: Option<LLVMValueRef>,
+    c_clone: Option<String>,
     at: Option<LLVMValueRef>,
+    c_at: Option<String>,
     vat: Option<LLVMValueRef>,
+    c_vat: Option<String>,
     size: Option<LLVMValueRef>,
+    c_size: String,
     slice: Option<LLVMValueRef>,
+    c_slice: Option<String>,
     extend: Option<LLVMValueRef>,
+    c_extend: Option<String>,
 }
 
 impl CodeGenExt for Vector {
@@ -241,12 +268,19 @@ impl Vector {
             elem_ty,
             c_elem_ty,
             new: None,
+            c_new: None,
             clone: None,
+            c_clone: None,
             at: None,
+            c_at: None,
             vat: None,
+            c_vat: None,
             size: None,
+            c_size: String::new(),
             slice: None,
+            c_slice: None,
             extend: None,
+            c_extend: None,
         }
     }
 
@@ -514,31 +548,28 @@ impl Vector {
         ))
     }
 
-    /// Generates the `size` method on vectors and calls it.
-    ///
-    /// This returns the size (equivalently, the capacity) of the vector.
-    pub unsafe fn gen_size(
+    /// Helper function to generate the `size` method on vectors.
+    pub unsafe fn define_size(
         &mut self,
-        builder: LLVMBuilderRef,
-        vector: LLVMValueRef,
-    ) -> WeldResult<LLVMValueRef> {
+    ) {
         if self.size.is_none() {
             // Generate size function only once.
             let mut arg_tys = [self.vector_ty];
             let ret_ty = self.i64_type();
-            let c_arg_tys = [self.name.clone()];
-            let c_ret_ty = &self.i64_c_type();
+            let c_arg_tys = [self.pointer_c_type(&self.name)];
+            let c_ret_ty = &self.u64_c_type();
 
             // Use C name.
             let name = format!("{}_size", self.name);
             // let name = format!("{}.size", self.name);
-            let (function, builder, _, mut ccode) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, mut ccode) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
 
             // for C
             ccode.add("{");
             ccode.add(format!("return {}->size;", self.c_get_param(0)));
             ccode.add("}");
             (*self.ccontext()).prelude_code.add(ccode.result());
+            self.c_size = name;
             // for LLVM
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
@@ -549,6 +580,18 @@ impl Vector {
             self.size = Some(function);
             LLVMDisposeBuilder(builder);
         }
+    }
+    /// Generates the `size` method on vectors and calls it.
+    ///
+    /// This returns the size (equivalently, the capacity) of the vector.
+    pub unsafe fn gen_size(
+        &mut self,
+        builder: LLVMBuilderRef,
+        vector: LLVMValueRef,
+    ) -> WeldResult<LLVMValueRef> {
+        if self.size.is_none() {
+            self.define_size();
+        }
 
         let mut args = [vector];
         Ok(LLVMBuildCall(
@@ -558,6 +601,18 @@ impl Vector {
             args.len() as u32,
             c_str!(""),
         ))
+    }
+    pub unsafe fn c_gen_size(
+        &mut self,
+        _builder: LLVMBuilderRef,
+        vector: &str,
+    ) -> WeldResult<String> {
+        if self.size.is_none() {
+            // define both C and LLVM functions.
+            self.define_size();
+        }
+
+        Ok(format!("{}(&{});", self.c_size, vector))
     }
 
     /// Generates the `extend` method on vectors and calls it.
