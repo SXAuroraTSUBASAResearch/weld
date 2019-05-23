@@ -252,7 +252,7 @@ impl Intrinsics {
         name: Option<String>,
     ) -> String {
         let args = [nworkers, memlimit];
-        let ret_type = &self.run_handle_c_type();
+        let ret_type = &self.c_run_handle_type();
         self.c_call(builder, "weld_runst_init", &args, ret_type, name)
     }
 
@@ -279,7 +279,7 @@ impl Intrinsics {
         name: Option<String>,
     ) -> String {
         let args = [run];
-        let ret_type = &self.void_pointer_c_type();
+        let ret_type = &self.c_void_pointer_type();
         self.c_call(builder, "weld_runst_get_result", &args, ret_type, name)
     }
 
@@ -308,7 +308,7 @@ impl Intrinsics {
         name: Option<String>,
     ) -> String {
         let args = [run, pointer];
-        let ret_type = &self.void_pointer_c_type();
+        let ret_type = &self.c_void_pointer_type();
         self.c_call(builder, "weld_runst_set_result", &args, ret_type, name)
     }
 
@@ -337,7 +337,7 @@ impl Intrinsics {
         name: Option<String>,
     ) -> String {
         let args = [run, size];
-        let ret_type = &self.void_pointer_c_type();
+        let ret_type = &self.c_void_pointer_type();
         self.c_call(builder, "weld_runst_malloc", &args, ret_type, name)
     }
 
@@ -569,9 +569,9 @@ typedef struct {{
     {u64} allocated;
 }} WeldRuntimeContext;
 typedef WeldRuntimeContext* WeldRuntimeContextRef;",
-            i32=self.i32_c_type(),
-            i64=self.i64_c_type(),
-            u64=self.u64_c_type(),
+            i32=self.c_i32_type(),
+            i64=self.c_i64_type(),
+            u64=self.c_u64_type(),
         ));
 
         let int8p = LLVMPointerType(self.i8_type(), 0);
@@ -605,10 +605,10 @@ extern void* malloc({u64});
     run->allocated = 0;
     return ({run_handle})run;
 }}",
-            run_handle=self.run_handle_c_type(),
-            i32=self.i32_c_type(),
-            i64=self.i64_c_type(),
-            u64=self.u64_c_type(),
+            run_handle=self.c_run_handle_type(),
+            i32=self.c_i32_type(),
+            i64=self.c_i64_type(),
+            u64=self.c_u64_type(),
         ));
 
         let mut params = vec![self.run_handle_type()];
@@ -631,7 +631,7 @@ void* weld_runst_get_result({run_handle} run)
 {{
     return ((WeldRuntimeContextRef)run)->result;
 }}",
-            run_handle=self.run_handle_c_type(),
+            run_handle=self.c_run_handle_type(),
         ));
 
         let mut params = vec![self.run_handle_type(), int8p];
@@ -654,8 +654,8 @@ void* weld_runst_set_result({run_handle} run, {voidp} p)
 {{
     return ((WeldRuntimeContextRef)run)->result = p;
 }}",
-            run_handle=self.run_handle_c_type(),
-            voidp=self.void_pointer_c_type(),
+            run_handle=self.c_run_handle_type(),
+            voidp=self.c_void_pointer_type(),
         ));
 
 
@@ -675,8 +675,8 @@ void* weld_runst_malloc({run_handle} run, {u64} size)
     // return ((WeldRuntimeContextRef)run)->result;
     return malloc(size);
 }}",
-            run_handle=self.run_handle_c_type(),
-            u64=self.u64_c_type(),
+            run_handle=self.c_run_handle_type(),
+            u64=self.c_u64_type(),
         ));
 /*
     unsafe fn malloc(&mut self, size: i64) -> Ptr {
@@ -760,8 +760,8 @@ pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int
 {{
     return ((WeldRuntimeContextRef)run)->errno;
 }}",
-            run_handle=self.run_handle_c_type(),
-            i64=self.i64_c_type(),
+            run_handle=self.c_run_handle_type(),
+            i64=self.c_i64_type(),
         ));
 
         let mut params = vec![self.run_handle_type(), self.i64_type()];

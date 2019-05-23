@@ -22,7 +22,7 @@ use crate::codegen::c::llvm_exts::*;
 use crate::codegen::c::CodeGenExt;
 use crate::codegen::c::LLVM_VECTOR_WIDTH;
 use crate::codegen::c::CContextRef;
-use crate::codegen::c::u64_c_type;
+use crate::codegen::c::c_u64_type;
 
 pub const POINTER_INDEX: u32 = 0;
 pub const SIZE_INDEX: u32 = 1;
@@ -74,8 +74,8 @@ impl Appender {
         let mut def = CodeBuilder::new();
         def.add("typedef struct {");
         def.add(format!("{elem_ty}* data;", elem_ty=c_elem_ty));
-        def.add(format!("{u64} size;", u64=u64_c_type(ccontext)));
-        def.add(format!("{u64} capacity;", u64=u64_c_type(ccontext)));
+        def.add(format!("{u64} size;", u64=c_u64_type(ccontext)));
+        def.add(format!("{u64} capacity;", u64=c_u64_type(ccontext)));
         def.add(format!("}} {};", name.as_ref()));
         (*ccontext).prelude_code.add(def.result());
         // for LLVM
@@ -138,7 +138,7 @@ impl Appender {
     ) -> WeldResult<LLVMValueRef> {
         if self.new.is_none() {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
-            let c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
+            let c_arg_tys = [self.c_i64_type(), self.c_run_handle_type()];
             let ret_ty = self.appender_ty;
             let c_ret_ty = &self.name.clone();
 
@@ -189,7 +189,7 @@ impl Appender {
         let (merge_ty, c_merge_ty, num_elements) = if vectorized {
             (
                 LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH),
-                self.simd_c_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH),
+                self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH),
                 LLVM_VECTOR_WIDTH,
             )
         } else {
@@ -208,12 +208,12 @@ impl Appender {
             self.run_handle_type(),
         ];
         let c_arg_tys = [
-            self.pointer_c_type(&self.name),
+            self.c_pointer_type(&self.name),
             c_merge_ty,
-            self.run_handle_c_type(),
+            self.c_run_handle_type(),
         ];
         let ret_ty = LLVMVoidTypeInContext(self.context);
-        let c_ret_ty = &self.void_c_type();
+        let c_ret_ty = &self.c_void_type();
         let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
@@ -342,7 +342,7 @@ impl Appender {
         use crate::codegen::c::vector;
         if self.result.is_none() {
             let mut arg_tys = [LLVMPointerType(self.appender_ty, 0)];
-            let c_arg_tys = [self.pointer_c_type(&self.name)];
+            let c_arg_tys = [self.c_pointer_type(&self.name)];
             let ret_ty = vector_ty;
             let c_ret_ty = &c_vector_ty;
             let name = format!("{}.result", self.name);

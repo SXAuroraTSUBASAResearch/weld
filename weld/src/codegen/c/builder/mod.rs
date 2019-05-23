@@ -77,7 +77,7 @@ pub trait BuilderExpressionGen {
     ) -> WeldResult<()>;
     /// Generates code to define builder types.
     unsafe fn builder_type(&mut self, builder: &Type) -> WeldResult<LLVMTypeRef>;
-    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<String>;
+    unsafe fn c_builder_type(&mut self, builder: &Type) -> WeldResult<String>;
 }
 
 /// Encapsulates the fields of a `NewBuilder` statement.
@@ -568,7 +568,7 @@ impl BuilderExpressionGen for CGenerator {
             unreachable!()
         }
     }
-    unsafe fn builder_c_type(&mut self, builder: &Type) -> WeldResult<String> {
+    unsafe fn c_builder_type(&mut self, builder: &Type) -> WeldResult<String> {
         if let Builder(ref kind, _) = *builder {
             match *kind {
                 Appender(ref elem_type) => {

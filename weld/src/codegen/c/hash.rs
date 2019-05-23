@@ -64,11 +64,11 @@ impl GenHash for CGenerator {
             let c_ty = self.c_type(ty)?;
             let c_arg_tys = [
                 format!("{}*", c_ty),
-                self.hash_c_type(),
+                self.c_hash_type(),
             ];
 
             let ret_ty = self.hash_type();
-            let c_ret_ty = &self.hash_c_type();
+            let c_ret_ty = &self.c_hash_type();
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
             let prefix = CStr::from_ptr(c_prefix);

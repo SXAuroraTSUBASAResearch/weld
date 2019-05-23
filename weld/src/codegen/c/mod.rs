@@ -209,7 +209,7 @@ typedef struct {{
     {i64} run;
 }} input_args_t;
 
-", i64=i64_c_type(ccontext), i32=i32_c_type(ccontext)));
+", i64=c_i64_type(ccontext), i32=c_i32_type(ccontext)));
             (*ccontext).input_arg_defined = true;
         }
         "input_args_t"
@@ -267,7 +267,7 @@ typedef struct {{
     {i64} errno;
 }} output_args_t;
 
-", i64=i64_c_type(ccontext)));
+", i64=c_i64_type(ccontext)));
             (*ccontext).output_arg_defined = true;
         }
         "output_args_t"
@@ -301,7 +301,7 @@ typedef struct {{
 /// For instructions that require `i1` (e.g, conditional branching or select), the caller
 /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
 /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
-unsafe fn bool_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_bool_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&Bool) {
         (*ccontext).prelude_code.add("typedef char bool;");
@@ -310,7 +310,7 @@ unsafe fn bool_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&Bool).unwrap().to_string()
 }
 
-unsafe fn i1_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_i1_type(ccontext: CContextRef) -> String {
     if !(*ccontext).i1_defined {
         (*ccontext).prelude_code.add("typedef char i1;");
         (*ccontext).i1_defined = true;
@@ -318,7 +318,7 @@ unsafe fn i1_c_type(ccontext: CContextRef) -> String {
     "i1".to_string()
 }
 
-unsafe fn i8_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_i8_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I8) {
         (*ccontext).prelude_code.add("typedef char i8;");
@@ -327,7 +327,7 @@ unsafe fn i8_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&I8).unwrap().to_string()
 }
 
-unsafe fn u8_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_u8_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U8) {
         (*ccontext).prelude_code.add("typedef unsigned char u8;");
@@ -336,7 +336,7 @@ unsafe fn u8_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&U8).unwrap().to_string()
 }
 
-unsafe fn i16_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_i16_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I16) {
         (*ccontext).prelude_code.add("typedef short i16;");
@@ -345,7 +345,7 @@ unsafe fn i16_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&I16).unwrap().to_string()
 }
 
-unsafe fn u16_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_u16_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U16) {
         (*ccontext).prelude_code.add("typedef unsigned short u16;");
@@ -354,7 +354,7 @@ unsafe fn u16_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&U16).unwrap().to_string()
 }
 
-unsafe fn i32_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_i32_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I32) {
         (*ccontext).prelude_code.add("typedef int i32;");
@@ -363,7 +363,7 @@ unsafe fn i32_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&I32).unwrap().to_string()
 }
 
-unsafe fn u32_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_u32_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U32) {
         (*ccontext).prelude_code.add("typedef unsigned int u32;");
@@ -372,7 +372,7 @@ unsafe fn u32_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&U32).unwrap().to_string()
 }
 
-unsafe fn i64_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_i64_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&I64) {
         (*ccontext).prelude_code.add("typedef long i64;");
@@ -381,7 +381,7 @@ unsafe fn i64_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&I64).unwrap().to_string()
 }
 
-unsafe fn u64_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_u64_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&U64) {
         (*ccontext).prelude_code.add("typedef unsigned long u64;");
@@ -390,7 +390,7 @@ unsafe fn u64_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&U64).unwrap().to_string()
 }
 
-unsafe fn f32_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_f32_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&F32) {
         (*ccontext).prelude_code.add("typedef float f32;");
@@ -399,7 +399,7 @@ unsafe fn f32_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&F32).unwrap().to_string()
 }
 
-unsafe fn f64_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_f64_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
     if !(*ccontext).basic_types.contains_key(&F64) {
         (*ccontext).prelude_code.add("typedef double f64;");
@@ -408,19 +408,19 @@ unsafe fn f64_c_type(ccontext: CContextRef) -> String {
     (*ccontext).basic_types.get(&F64).unwrap().to_string()
 }
 
-unsafe fn void_c_type(_ccontext: CContextRef) -> String {
+unsafe fn c_void_type(_ccontext: CContextRef) -> String {
     "void".to_string()
 }
 
-unsafe fn void_pointer_c_type(_ccontext: CContextRef) -> String {
+unsafe fn c_void_pointer_type(_ccontext: CContextRef) -> String {
     "void*".to_string()
 }
 
-unsafe fn pointer_c_type(_ccontext: CContextRef, ty: &str) -> String {
+unsafe fn c_pointer_type(_ccontext: CContextRef, ty: &str) -> String {
     format!("{}*", ty)
 }
 
-unsafe fn simd_c_type(_ccontext: CContextRef, ty: &str, size: u32) -> String {
+unsafe fn c_simd_type(_ccontext: CContextRef, ty: &str, size: u32) -> String {
     format!("simd_{}_{}", ty, size)
 }
 
@@ -428,7 +428,7 @@ unsafe fn c_type_of(_ccontext: CContextRef, ty: &str) -> String {
     format!("typeof({})", ty)
 }
 
-unsafe fn run_handle_c_type(ccontext: CContextRef) -> String {
+unsafe fn c_run_handle_type(ccontext: CContextRef) -> String {
     if !(*ccontext).run_handle_defined {
         (*ccontext).prelude_code.add(
             "typedef struct { char f; } RunHandle;");
@@ -625,8 +625,8 @@ pub trait CodeGenExt {
     unsafe fn hash_type(&self) -> LLVMTypeRef {
         self.i32_type()
     }
-    unsafe fn hash_c_type(&self) -> String {
-        self.i32_c_type()
+    unsafe fn c_hash_type(&self) -> String {
+        self.c_i32_type()
     }
 
     /// Returns the type of the key comparator over opaque pointers.
@@ -849,76 +849,76 @@ pub trait CodeGenExt {
     /// For instructions that require `i1` (e.g, conditional branching or select), the caller
     /// should truncate this type to `i1_type` manually. The distinction between booleans and `i1`
     /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
-    unsafe fn bool_c_type(&self) -> String {
-        bool_c_type(self.ccontext())
+    unsafe fn c_bool_type(&self) -> String {
+        c_bool_type(self.ccontext())
     }
 
-    unsafe fn i1_c_type(&self) -> String {
-        i1_c_type(self.ccontext())
+    unsafe fn c_i1_type(&self) -> String {
+        c_i1_type(self.ccontext())
     }
 
-    unsafe fn i8_c_type(&self) -> String {
-        i8_c_type(self.ccontext())
+    unsafe fn c_i8_type(&self) -> String {
+        c_i8_type(self.ccontext())
     }
 
-    unsafe fn u8_c_type(&self) -> String {
-        u8_c_type(self.ccontext())
+    unsafe fn c_u8_type(&self) -> String {
+        c_u8_type(self.ccontext())
     }
 
-    unsafe fn i16_c_type(&self) -> String {
-        i16_c_type(self.ccontext())
+    unsafe fn c_i16_type(&self) -> String {
+        c_i16_type(self.ccontext())
     }
 
-    unsafe fn u16_c_type(&self) -> String {
-        u16_c_type(self.ccontext())
+    unsafe fn c_u16_type(&self) -> String {
+        c_u16_type(self.ccontext())
     }
 
-    unsafe fn i32_c_type(&self) -> String {
-        i32_c_type(self.ccontext())
+    unsafe fn c_i32_type(&self) -> String {
+        c_i32_type(self.ccontext())
     }
 
-    unsafe fn u32_c_type(&self) -> String {
-        u32_c_type(self.ccontext())
+    unsafe fn c_u32_type(&self) -> String {
+        c_u32_type(self.ccontext())
     }
 
-    unsafe fn i64_c_type(&self) -> String {
-        i64_c_type(self.ccontext())
+    unsafe fn c_i64_type(&self) -> String {
+        c_i64_type(self.ccontext())
     }
 
-    unsafe fn u64_c_type(&self) -> String {
-        u64_c_type(self.ccontext())
+    unsafe fn c_u64_type(&self) -> String {
+        c_u64_type(self.ccontext())
     }
 
-    unsafe fn f32_c_type(&self) -> String {
-        f32_c_type(self.ccontext())
+    unsafe fn c_f32_type(&self) -> String {
+        c_f32_type(self.ccontext())
     }
 
-    unsafe fn f64_c_type(&self) -> String {
-        f64_c_type(self.ccontext())
+    unsafe fn c_f64_type(&self) -> String {
+        c_f64_type(self.ccontext())
     }
 
-    unsafe fn void_c_type(&self) -> String {
-        void_c_type(self.ccontext())
+    unsafe fn c_void_type(&self) -> String {
+        c_void_type(self.ccontext())
     }
 
-    unsafe fn void_pointer_c_type(&self) -> String {
-        void_pointer_c_type(self.ccontext())
+    unsafe fn c_void_pointer_type(&self) -> String {
+        c_void_pointer_type(self.ccontext())
     }
 
-    unsafe fn pointer_c_type(&self, ty: &str) -> String {
-        pointer_c_type(self.ccontext(), ty)
+    unsafe fn c_pointer_type(&self, ty: &str) -> String {
+        c_pointer_type(self.ccontext(), ty)
     }
 
     unsafe fn c_type_of(&self, ty: &str) -> String {
         c_type_of(self.ccontext(), ty)
     }
 
-    unsafe fn simd_c_type(&self, ty: &str, size: u32) -> String {
-        simd_c_type(self.ccontext(), ty, size)
+    unsafe fn c_simd_type(&self, ty: &str, size: u32) -> String {
+        c_simd_type(self.ccontext(), ty, size)
     }
 
-    unsafe fn run_handle_c_type(&self) -> String {
-        run_handle_c_type(self.ccontext())
+    unsafe fn c_run_handle_type(&self) -> String {
+        c_run_handle_type(self.ccontext())
     }
 
     /// Booleans are represented as `i8`.
@@ -1071,7 +1071,7 @@ pub trait CodeGenExt {
             last_arg = arg;
             last_i = i;
         }
-        if self.run_handle_c_type() == last_arg {
+        if self.c_run_handle_type() == last_arg {
             // Write "run" as parameter if the type of last arg is "RunHandle*".
             format!("{}{} run", args_line, last_arg)
         } else {
@@ -1253,7 +1253,7 @@ impl CGenerator {
 
         // Check whether we already have an existing run.
         // for C
-        (*self.ccontext()).body_code.add(format!("{handle} run = ({handle})input->run;", handle=self.run_handle_c_type()));
+        (*self.ccontext()).body_code.add(format!("{handle} run = ({handle})input->run;", handle=self.c_run_handle_type()));
         (*self.ccontext()).body_code.add("if (run == 0) {");
         
         // for LLVM
@@ -1392,7 +1392,7 @@ impl CGenerator {
         let c_result = (*self.ccontext()).var_ids.next();
         (*self.ccontext()).body_code.add(format!(
             "{i64} {result} = ({i64}){res};",
-            i64=self.i64_c_type(), result=c_result, res=res));
+            i64=self.c_i64_type(), result=c_result, res=res));
         let c_errno = self.intrinsics.c_call_weld_run_get_errno(
             &mut (*self.ccontext()).body_code,
             "run",
@@ -1401,7 +1401,7 @@ impl CGenerator {
         let c_run_int = (*self.ccontext()).var_ids.next();
         (*self.ccontext()).body_code.add(format!(
             "{i64} {run_int} = ({i64})run;",
-            i64=self.i64_c_type(), run_int=c_run_int));
+            i64=self.c_i64_type(), run_int=c_run_int));
         // for LLVM
         let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
         let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
@@ -1466,7 +1466,7 @@ impl CGenerator {
         // Generate Return instruction.
         // for C
         (*self.ccontext()).body_code.add(format!(
-            "return ({})output;\n}}", self.i64_c_type()));
+            "return ({})output;\n}}", self.c_i64_type()));
         // for LLVM
         LLVMBuildStore(builder, output, return_pointer);
         let return_value = LLVMBuildPtrToInt(builder, return_pointer, self.i64_type(), c_str!(""));
@@ -1612,7 +1612,7 @@ impl CGenerator {
     ) -> WeldResult<()> {
         // for C
         let mut arg_tys = self.c_argument_types(func)?;
-        arg_tys.push(self.run_handle_c_type());
+        arg_tys.push(self.c_run_handle_type());
         let args_line = self.c_define_args(&arg_tys);
         let ret_ty = self.c_type(&func.return_type)?.to_string();
         let function = &self.c_functions[&func.id];
@@ -2250,7 +2250,7 @@ impl CGenerator {
                     );
                 context.body.add(format!(
                     "*({}){} = {};",
-                    self.pointer_c_type(&ty),
+                    self.c_pointer_type(&ty),
                     bytes,
                     value,
                 ));
@@ -2441,7 +2441,7 @@ impl CGenerator {
         let result = match *ty {
             Builder(_, _) => {
                 use self::builder::BuilderExpressionGen;
-                self.builder_c_type(ty)?
+                self.c_builder_type(ty)?
             }
             Dict(ref key, ref value) => {
                 use self::eq::GenEq;
@@ -2467,17 +2467,17 @@ impl CGenerator {
                 self.dictionaries[ty].name.clone()
             }
             Scalar(kind) => match kind {
-                Bool => self.bool_c_type(),
-                I8 => self.i8_c_type(),
-                U8 => self.u8_c_type(),
-                I16 => self.i16_c_type(),
-                U16 => self.u16_c_type(),
-                I32 => self.i32_c_type(),
-                U32 => self.u32_c_type(),
-                I64 => self.i64_c_type(),
-                U64 => self.u64_c_type(),
-                F32 => self.f32_c_type(),
-                F64 => self.f64_c_type(),
+                Bool => self.c_bool_type(),
+                I8 => self.c_i8_type(),
+                U8 => self.c_u8_type(),
+                I16 => self.c_i16_type(),
+                U16 => self.c_u16_type(),
+                I32 => self.c_i32_type(),
+                U32 => self.c_u32_type(),
+                I64 => self.c_i64_type(),
+                U64 => self.c_u64_type(),
+                F32 => self.c_f32_type(),
+                F64 => self.c_f64_type(),
             },
             Simd(kind) => {
                 if !(*self.ccontext()).simd_types.contains_key(&kind) {

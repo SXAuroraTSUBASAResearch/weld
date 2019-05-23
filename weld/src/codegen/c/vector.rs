@@ -26,7 +26,7 @@ use super::intrinsic::Intrinsics;
 use super::CodeGenExt;
 use super::CGenerator;
 use super::LLVM_VECTOR_WIDTH;
-use super::u64_c_type;
+use super::c_u64_type;
 
 use crate::codegen::c::CContextRef;
 
@@ -251,7 +251,7 @@ impl Vector {
         let mut def = CodeBuilder::new();
         def.add("typedef struct {");
         def.add(format!("{elem_ty}* data;", elem_ty=c_elem_ty));
-        def.add(format!("{u64} size;", u64=u64_c_type(ccontext)));
+        def.add(format!("{u64} size;", u64=c_u64_type(ccontext)));
         def.add(format!("}} {};", name.as_ref()));
         (*ccontext).prelude_code.add(def.result());
         // for LLVM
@@ -309,7 +309,7 @@ impl Vector {
         if self.new.is_none() {
             let mut arg_tys = [self.i64_type(), self.run_handle_type()];
             let ret_ty = self.vector_ty;
-            let c_arg_tys = [self.i64_c_type(), self.run_handle_c_type()];
+            let c_arg_tys = [self.c_i64_type(), self.c_run_handle_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.new", self.name);
@@ -359,7 +359,7 @@ impl Vector {
         if self.clone.is_none() {
             let mut arg_tys = [self.vector_ty, self.run_handle_type()];
             let ret_ty = self.vector_ty;
-            let c_arg_tys = [self.name.clone(), self.run_handle_c_type()];
+            let c_arg_tys = [self.name.clone(), self.c_run_handle_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.clone", self.name);
@@ -422,8 +422,8 @@ impl Vector {
         if self.at.is_none() {
             let mut arg_tys = [self.vector_ty, self.i64_type()];
             let ret_ty = LLVMPointerType(self.elem_ty, 0);
-            let c_arg_tys = [self.name.clone(), self.i64_c_type()];
-            let c_ret_ty = &self.pointer_c_type(&self.c_elem_ty);
+            let c_arg_tys = [self.name.clone(), self.c_i64_type()];
+            let c_ret_ty = &self.c_pointer_type(&self.c_elem_ty);
 
             let name = format!("{}.at", self.name);
             let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
@@ -466,7 +466,7 @@ impl Vector {
         if self.slice.is_none() {
             let mut arg_tys = [self.vector_ty, self.i64_type(), self.i64_type()];
             let ret_ty = self.vector_ty;
-            let c_arg_tys = [self.name.clone(), self.i64_c_type(), self.i64_c_type()];
+            let c_arg_tys = [self.name.clone(), self.c_i64_type(), self.c_i64_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.slice", self.name);
@@ -519,8 +519,8 @@ impl Vector {
         if self.vat.is_none() {
             let mut arg_tys = [self.vector_ty, self.i64_type()];
             let ret_ty = LLVMPointerType(LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH), 0);
-            let c_arg_tys = [self.name.clone(), self.i64_c_type()];
-            let c_ret_ty = &self.pointer_c_type(&self.simd_c_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH));
+            let c_arg_tys = [self.name.clone(), self.c_i64_type()];
+            let c_ret_ty = &self.c_pointer_type(&self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH));
 
             let name = format!("{}.vat", self.name);
             let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
@@ -556,8 +556,8 @@ impl Vector {
             // Generate size function only once.
             let mut arg_tys = [self.vector_ty];
             let ret_ty = self.i64_type();
-            let c_arg_tys = [self.pointer_c_type(&self.name)];
-            let c_ret_ty = &self.u64_c_type();
+            let c_arg_tys = [self.c_pointer_type(&self.name)];
+            let c_ret_ty = &self.c_u64_type();
 
             // Use C name.
             let name = format!("{}_size", self.name);
@@ -635,7 +635,7 @@ impl Vector {
             trace!("Generated extend");
             let mut arg_tys = [self.vector_ty, self.i64_type(), self.run_handle_type()];
             let ret_ty = self.vector_ty;
-            let c_arg_tys = [self.name.clone(), self.i64_c_type(), self.run_handle_c_type()];
+            let c_arg_tys = [self.name.clone(), self.c_i64_type(), self.c_run_handle_type()];
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.extend", self.name);

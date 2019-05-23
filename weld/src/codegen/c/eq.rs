@@ -71,9 +71,9 @@ impl GenEq for CGenerator {
         // XXX Do we need the run handle?
         let mut arg_tys = [LLVMPointerType(llvm_ty, 0), LLVMPointerType(llvm_ty, 0)];
         let c_ty = &self.c_type(ty)?;
-        let c_arg_tys = [ self.pointer_c_type(c_ty), self.pointer_c_type(c_ty) ];
+        let c_arg_tys = [ self.c_pointer_type(c_ty), self.c_pointer_type(c_ty) ];
         let ret_ty = self.i1_type();
-        let c_ret_ty = &self.i1_c_type();
+        let c_ret_ty = &self.c_i1_type();
 
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);
@@ -275,9 +275,9 @@ impl GenEq for CGenerator {
 
         let llvm_ty = self.llvm_type(ty)?;
         let mut arg_tys = [self.void_pointer_type(), self.void_pointer_type()];
-        let c_arg_tys = [self.void_pointer_c_type(), self.void_pointer_c_type()];
+        let c_arg_tys = [self.c_void_pointer_type(), self.c_void_pointer_type()];
         let ret_ty = self.i32_type();
-        let c_ret_ty = &self.i32_c_type();
+        let c_ret_ty = &self.c_i32_type();
 
         let c_prefix = LLVMPrintTypeToString(llvm_ty);
         let prefix = CStr::from_ptr(c_prefix);

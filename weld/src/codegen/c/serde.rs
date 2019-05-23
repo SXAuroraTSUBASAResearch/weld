@@ -236,9 +236,9 @@ impl SerHelper for CGenerator {
             ];
             let c_arg_tys = [
                 c_buffer_ty,
-                self.i64_c_type(),
-                self.pointer_c_type(c_ty),
-                self.run_handle_c_type(),
+                self.c_i64_type(),
+                self.c_pointer_type(c_ty),
+                self.c_run_handle_type(),
             ];
             let ret_ty = self.llvm_type(&SER_RET_TY)?;
             let c_ret_ty = &self.c_type(&SER_RET_TY)?;
@@ -600,13 +600,13 @@ impl DeHelper for CGenerator {
             ];
             let c_arg_tys = [
                 c_buffer_ty,
-                self.i64_c_type(),
+                self.c_i64_type(),
                 format!("typeof(output)  /* FIXME */"),
-                self.run_handle_c_type(),
+                self.c_run_handle_type(),
             ];
             // Return the position.
             let ret_ty = self.i64_type();
-            let c_ret_ty = &self.i64_c_type();
+            let c_ret_ty = &self.c_i64_type();
 
             let c_prefix = LLVMPrintTypeToString(llvm_ty);
             let prefix = CStr::from_ptr(c_prefix);
