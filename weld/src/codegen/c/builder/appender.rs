@@ -225,7 +225,7 @@ impl Appender {
         if self.new.is_none() {
             self.define_new(intrinsics);
         }
-        Ok(format!("{}({}, {});", self.c_new, capacity, run))
+        Ok(format!("{}({}, {})", self.c_new, capacity, run))
     }
 
     /// Internal merge function generation that supports vectorization.

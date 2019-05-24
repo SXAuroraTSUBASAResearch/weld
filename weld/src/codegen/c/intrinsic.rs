@@ -404,7 +404,6 @@ impl Intrinsics {
         self.c_call(builder, "weld_runst_get_errno", &args, "i64", name)
     }
 
-
     /// Convinience wrapper for calling the `weld_runst_set_errno` intrinsic.
     pub unsafe fn call_weld_run_set_errno(
         &mut self,
@@ -421,6 +420,16 @@ impl Intrinsics {
             args.len() as u32,
             name.unwrap_or(c_str!("")),
         )
+    }
+    pub unsafe fn c_call_weld_run_set_errno(
+        &mut self,
+        builder: &mut CodeBuilder,
+        run: &str,
+        errno: &str,
+        _name: Option<String>,
+    ) {
+        let args = [run, errno];
+        self.c_call_void(builder, "weld_runst_get_errno", &args)
     }
 
     /// Convinience wrapper for calling the `weld_runst_assert` intrinsic.
@@ -779,6 +788,18 @@ pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_set_errno as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add(format!("\
+void weld_runst_set_errno({run_handle} run, {i64} errno)
+{{
+    ((WeldRuntimeContextRef)run)->errno = errno;
+    abort();
+    // FIXME: need to throw termination signal to caller here.
+    //        weld for llvm call panic function in rust like below.
+    // panic!(\"Weld runtime threw error: {{}}\", self.errno)
+}}",
+            run_handle=self.c_run_handle_type(),
+            i64=self.c_i64_type(),
+        ));
 
         let mut params = vec![self.run_handle_type(), self.bool_type()];
         let name = CString::new("weld_runst_assert").unwrap();

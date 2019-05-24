@@ -1372,9 +1372,12 @@ impl CGenerator {
         // Run the Weld program.
         // for C
         let args_line = self.c_call_args(&c_func_args);
-        self.c_call_sir_function(&program.funcs[0],
-                                 &args_line,
-                                 None)?;
+        self.c_call_sir_function(
+            &mut (*self.ccontext()).body_code,
+            &program.funcs[0],
+            &args_line,
+            None,
+        )?;
         // for LLVM
         let entry_function = self.functions[&program.funcs[0].id];
         let inst = LLVMBuildCall(
@@ -1527,20 +1530,21 @@ impl CGenerator {
 
     pub unsafe fn c_call_sir_function(
         &mut self,
+        builder: &mut CodeBuilder,
         func: &SirFunction,
         args_line: &str,
         result: Option<String>,
     ) -> WeldResult<String> {
         if let Some(res) = result {
             let fun = &self.c_functions[&func.id];
-            (*self.ccontext()).body_code.add(format!(
+            builder.add(format!(
                 "{} = {}({});", res, fun, args_line));
             Ok(res)
         } else {
             let res = (*self.ccontext()).var_ids.next();
             let ret_ty = self.c_type(&func.return_type)?.to_string();
             let fun = &self.c_functions[&func.id];
-            (*self.ccontext()).body_code.add(format!(
+            builder.add(format!(
                 "{} {} = {}({});", ret_ty, res, fun, args_line));
             Ok(res)
         }
@@ -2252,7 +2256,7 @@ impl CGenerator {
         &mut self,
         context: &mut FunctionContext<'_>,
         bb: &BasicBlock,
-        loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef, &str)>,
+        loop_terminator: Option<(LLVMBasicBlockRef, LLVMValueRef, String)>,
     ) -> WeldResult<()> {
         if self.conf.trace_run {
             self.gen_print(
@@ -2620,6 +2624,8 @@ pub struct FunctionContext<'a> {
     var_ids: IdGenerator,
     /// A CodeBuilder for each function.
     body: CodeBuilder,
+    /// Counter for unique basic block names.
+    bb_index: u32,
 }
 
 impl<'a> FunctionContext<'a> {
@@ -2638,6 +2644,7 @@ impl<'a> FunctionContext<'a> {
             blocks: FnvHashMap::default(),
             var_ids: IdGenerator::new("t"),
             body: CodeBuilder::new(),
+            bb_index: 0,
         }
     }
 

@@ -508,7 +508,7 @@ impl Vector {
             self.define_at();
         }
 
-        Ok(format!("{}(&{}, {});", self.c_at, vector, index))
+        Ok(format!("{}(&{}, {})", self.c_at, vector, index))
     }
 
 
@@ -676,7 +676,7 @@ impl Vector {
             self.define_size();
         }
 
-        Ok(format!("{}(&{});", self.c_size, vector))
+        Ok(format!("{}(&{})", self.c_size, vector))
     }
 
     /// Generates the `extend` method on vectors and calls it.
