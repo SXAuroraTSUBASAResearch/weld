@@ -1811,7 +1811,12 @@ impl CGenerator {
             }
             GetField { ref value, index } => {
                 // for C
-                context.body.add("#error GetField is not implemented yet");
+                context.body.add(format!(
+                    "{} = {}->f{};",
+                    context.c_get_value(output)?,
+                    context.c_get_value(value)?,
+                    index,
+                ));
 
                 // for LLVM
                 let output_pointer = context.get_value(output)?;
@@ -1981,7 +1986,7 @@ impl CGenerator {
                         "{}->f{} = {};",
                         c_output_pointer,
                         i,
-                        &context.c_get_value(elem)?,
+                        context.c_get_value(elem)?,
                     ));
                     // for LLVM
                     let elem_pointer =
