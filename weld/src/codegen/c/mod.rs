@@ -1973,12 +1973,17 @@ impl CGenerator {
                 }
             }
             MakeStruct(ref elems) => {
-                // for C
-                context.body.add("#error MakeStruct is not implemented yet");
-
-                // for LLVM
                 let output_pointer = context.get_value(output)?;
+                let c_output_pointer = context.c_get_value(output)?;
                 for (i, elem) in elems.iter().enumerate() {
+                    // for C
+                    context.body.add(format!(
+                        "{}->f{} = {};",
+                        c_output_pointer,
+                        i,
+                        &context.c_get_value(elem)?,
+                    ));
+                    // for LLVM
                     let elem_pointer =
                         LLVMBuildStructGEP(context.builder, output_pointer, i as u32, c_str!(""));
                     let value = self.load(context.builder, context.get_value(elem)?)?;
