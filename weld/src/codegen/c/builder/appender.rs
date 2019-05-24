@@ -135,6 +135,24 @@ impl Appender {
             Ok(pointer)
         }
     }
+    unsafe fn c_gen_index(
+        &mut self,
+        appender: &str,
+        index: Option<String>,
+    ) -> WeldResult<String> {
+        if let Some(index) = index {
+            Ok(format!(
+                "&({}->data[{}])",
+                appender,
+                index,
+            ))
+        } else {
+            Ok(format!(
+                "{}->data",
+                appender,
+            ))
+        }
+    }
 
     /// Define code for a new appender.
     pub unsafe fn define_new(
@@ -382,13 +400,11 @@ impl Appender {
     /// Generates code to get the result from an appender.
     ///
     /// The Appender's result is a vector.
-    pub unsafe fn gen_result(
+    pub unsafe fn define_result(
         &mut self,
-        builder: LLVMBuilderRef,
         vector_ty: LLVMTypeRef,
         c_vector_ty: &str,
-        builder_arg: LLVMValueRef,
-    ) -> WeldResult<LLVMValueRef> {
+    ) -> WeldResult<()> {
         // The vector type that the appender generates.
         use crate::codegen::c::vector;
         if self.result.is_none() {
@@ -396,9 +412,24 @@ impl Appender {
             let c_arg_tys = [self.c_pointer_type(&self.name)];
             let ret_ty = vector_ty;
             let c_ret_ty = &c_vector_ty;
-            let name = format!("{}.result", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
 
+            // Use C name.
+            let name = format!("{}_result", self.name);
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+
+            // for C
+            c_code.add("{");
+            // let elem_size = self.size_of(self.elem_ty);
+            c_code.add(format!("{} ret;", c_vector_ty));
+            let appender = self.c_get_param(0);
+            let pointer = self.c_gen_index(&appender, None)?;
+            c_code.add(format!("ret->data = {};", pointer));
+            c_code.add(format!("ret->size = {}->size;", appender));
+            c_code.add("return ret;");
+            c_code.add("}");
+            (*self.ccontext()).prelude_code.add(c_code.result());
+            self.c_result = name;
+            // for LLVM
             let appender = LLVMGetParam(function, 0);
 
             let pointer = self.gen_index(builder, appender, None)?;
@@ -414,6 +445,22 @@ impl Appender {
             self.result = Some(function);
             LLVMDisposeBuilder(builder);
         }
+        Ok(())
+    }
+
+    /// Generates code to get the result from an appender.
+    ///
+    /// The Appender's result is a vector.
+    pub unsafe fn gen_result(
+        &mut self,
+        builder: LLVMBuilderRef,
+        vector_ty: LLVMTypeRef,
+        c_vector_ty: &str,
+        builder_arg: LLVMValueRef,
+    ) -> WeldResult<LLVMValueRef> {
+        if self.result.is_none() {
+            self.define_result(vector_ty, c_vector_ty)?;
+        }
 
         let mut args = [builder_arg];
         Ok(LLVMBuildCall(
@@ -423,5 +470,17 @@ impl Appender {
             args.len() as u32,
             c_str!(""),
         ))
+    }
+    pub unsafe fn c_gen_result(
+        &mut self,
+        _builder: LLVMBuilderRef,
+        vector_ty: LLVMTypeRef,
+        c_vector_ty: &str,
+        builder_arg: &str,
+    ) -> WeldResult<String> {
+        if self.result.is_none() {
+            self.define_result(vector_ty, c_vector_ty)?;
+        }
+        Ok(format!("{}(&{})", self.c_result, builder_arg))
     }
 }

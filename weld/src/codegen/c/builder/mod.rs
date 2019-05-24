@@ -518,17 +518,26 @@ impl BuilderExpressionGen for CGenerator {
     ) -> WeldResult<()> {
         let m = ResStatement::extract(statement, ctx.sir_function)?;
         let output_pointer = ctx.get_value(m.output)?;
+        let c_output_pointer = ctx.c_get_value(m.output)?;
         let builder_pointer = ctx.get_value(m.builder)?;
+        let c_builder_pointer = ctx.c_get_value(m.builder)?;
         match *m.kind {
             Appender(ref elem_type) => {
-                // for C
-                ctx.body.add(
-                    "#error Res for Appender is not implemented yet");
-
-                // for LLVM
                 let vector = &Vector(elem_type.clone());
                 let vector_type = self.llvm_type(vector)?;
                 let c_vector_type = &self.c_type(vector)?.to_string();
+                // for C
+                let result = {
+                    let methods = self.appenders.get_mut(m.kind).unwrap();
+                    methods.c_gen_result(ctx.builder, vector_type, c_vector_type, &c_builder_pointer)?
+                };
+                ctx.body.add(format!(
+                    "{} = {};",
+                    c_output_pointer,
+                    result,
+                ));
+
+                // for LLVM
                 let result = {
                     let methods = self.appenders.get_mut(m.kind).unwrap();
                     methods.gen_result(ctx.builder, vector_type, c_vector_type, builder_pointer)?
