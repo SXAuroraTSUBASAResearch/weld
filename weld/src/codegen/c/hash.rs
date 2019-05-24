@@ -95,20 +95,30 @@ impl GenHash for CGenerator {
             // since everything we care about will have SSE 4.2, this is sufficient.
             let hash = if self.target.features.x86_supports(X86Feature::SSE4_2) {
                 // x86 CRC intrinsics.
+                // FIXME: intrinsics for C is not implemented yet.
+                // just adding their name to make weld compilable here.
                 let crc64 = "llvm.x86.sse42.crc32.64.64";
+                let c_crc64 = "llvm.x86.sse42.crc32.64.64";
                 let crc32 = "llvm.x86.sse42.crc32.32.32";
+                let c_crc32 = "llvm.x86.sse42.crc32.32.32";
                 let crc16 = "llvm.x86.sse42.crc32.32.16";
+                let c_crc16 = "llvm.x86.sse42.crc32.32.16";
                 let crc8 = "llvm.x86.sse42.crc32.32.8";
+                let c_crc8 = "llvm.x86.sse42.crc32.32.8";
 
                 let u64_ty = self.u64_type();
+                let c_u64_ty = &self.c_u64_type() as &str;
                 let u32_ty = self.u32_type();
+                let c_u32_ty = &self.c_u32_type() as &str;
                 let u16_ty = self.u16_type();
+                let c_u16_ty = &self.c_u16_type() as &str;
                 let u8_ty = self.u8_type();
+                let c_u8_ty = &self.c_u8_type() as &str;
 
-                let _ = self.intrinsics.add(crc64, u64_ty, &mut [u64_ty, u64_ty]);
-                let _ = self.intrinsics.add(crc32, u32_ty, &mut [u32_ty, u32_ty]);
-                let _ = self.intrinsics.add(crc16, u32_ty, &mut [u32_ty, u16_ty]);
-                let _ = self.intrinsics.add(crc8, u32_ty, &mut [u32_ty, u8_ty]);
+                let _ = self.intrinsics.add(crc64, c_crc64, u64_ty, c_u64_ty, &mut [u64_ty, u64_ty], &[c_u64_ty, c_u64_ty]);
+                let _ = self.intrinsics.add(crc32, c_crc32, u32_ty, c_u32_ty, &mut [u32_ty, u32_ty], &[c_u32_ty, c_u32_ty]);
+                let _ = self.intrinsics.add(crc16, c_crc16, u32_ty, c_u32_ty, &mut [u32_ty, u16_ty], &[c_u32_ty, c_u16_ty]);
+                let _ = self.intrinsics.add(crc8, c_crc8, u32_ty, c_u32_ty, &mut [u32_ty, u8_ty], &[c_u32_ty, c_u8_ty]);
 
                 // Use the CRC-32 set of hash functions. These functions are exposed as target-specific
                 // x86 intrinsics.

@@ -1775,7 +1775,9 @@ impl CGenerator {
                 // for LLVM
                 let output_pointer = context.get_value(output)?;
                 let return_ty = self.llvm_type(context.sir_function.symbol_type(output)?)?;
+                let c_return_ty = self.c_type(context.sir_function.symbol_type(output)?)?;
                 let mut arg_tys = vec![];
+                let mut c_arg_tys = vec![];
 
                 // A CUDF with declaration Name[R](T1, T2, T3) has a signature `void Name(T1, T2, T3, R)`.
                 for arg in args.iter() {
@@ -1783,11 +1785,16 @@ impl CGenerator {
                         self.llvm_type(context.sir_function.symbol_type(arg)?)?,
                         0,
                     ));
+                    let c_ty = self.c_type(context.sir_function.symbol_type(arg)?)?;
+                    c_arg_tys.push(self.c_pointer_type(&c_ty));
                 }
                 arg_tys.push(LLVMPointerType(return_ty, 0));
+                c_arg_tys.push(self.c_pointer_type(&c_return_ty));
 
                 let fn_ret_ty = self.void_type();
-                self.intrinsics.add(symbol_name, fn_ret_ty, &mut arg_tys);
+                let c_fn_ret_ty = self.c_void_type();
+                let v8 : Vec<&str> = c_arg_tys.iter().map(AsRef::as_ref).collect();
+                self.intrinsics.add(symbol_name, symbol_name, fn_ret_ty, &c_fn_ret_ty, &mut arg_tys, &v8);
 
                 let mut arg_values = vec![];
                 for arg in args.iter() {
@@ -2169,7 +2176,7 @@ impl CGenerator {
                     // element size, comparator function, run handle.
                     //
                     // MacOS and Linux pass arguments to qsort_r in different order.
-                    let (mut args, mut arg_tys) = if cfg!(target_os = "macos") {
+                    let (mut args, mut arg_tys, c_arg_tys) = if cfg!(target_os = "macos") {
                         let args = vec![elems_ptr, size, ty_size, run, comparator];
                         let arg_tys = vec![
                             LLVMTypeOf(elems_ptr),
@@ -2178,7 +2185,21 @@ impl CGenerator {
                             LLVMTypeOf(run),
                             LLVMTypeOf(comparator),
                         ];
-                        (args, arg_tys)
+                        let c_arg_tys = [
+                            "dummy",
+                            "dummy",
+                            "dummy",
+                            "dummy",
+                            "dummy",
+                            /*
+                            self.c_type_of(c_elems_ptr),
+                            self.c_type_of(c_size),
+                            self.c_type_of(c_ty_size),
+                            self.c_type_of(c_run),
+                            self.c_type_of(c_comparator),
+                            */
+                        ];
+                        (args, arg_tys, c_arg_tys)
                     } else if cfg!(target_os = "linux") {
                         let args = vec![elems_ptr, size, ty_size, comparator, run];
                         let arg_tys = vec![
@@ -2188,14 +2209,29 @@ impl CGenerator {
                             LLVMTypeOf(comparator),
                             LLVMTypeOf(run),
                         ];
-                        (args, arg_tys)
+                        let c_arg_tys = [
+                            "dummy",
+                            "dummy",
+                            "dummy",
+                            "dummy",
+                            "dummy",
+                            /*
+                            self.c_type_of(c_elems_ptr),
+                            self.c_type_of(c_size),
+                            self.c_type_of(c_ty_size),
+                            self.c_type_of(c_comparator),
+                            self.c_type_of(c_run),
+                            */
+                        ];
+                        (args, arg_tys, c_arg_tys)
                     } else {
                         unimplemented!("Sort not available on this platform.");
                     };
 
                     // Generate the call to qsort.
                     let void_type = self.void_type();
-                    self.intrinsics.add("qsort_r", void_type, &mut arg_tys);
+                    let c_void_type = self.c_void_type();
+                    self.intrinsics.add("qsort_r", "qsort_r", void_type, &c_void_type, &mut arg_tys, &c_arg_tys);
                     self.intrinsics
                         .call(context.builder, "qsort_r", &mut args)?;
 
@@ -2240,10 +2276,6 @@ impl CGenerator {
                 Ok(())
             }
             UnaryOp { .. } => {
-                // for C
-                context.body.add("#error UnaryOp is not implemented yet");
-
-                // for LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_unaryop(context, statement)
             }

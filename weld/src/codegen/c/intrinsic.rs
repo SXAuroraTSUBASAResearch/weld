@@ -140,10 +140,22 @@ impl Intrinsics {
     pub unsafe fn add<T: AsRef<str>>(
         &mut self,
         name: T,
+        c_name: &str,
         ret_ty: LLVMTypeRef,
+        c_ret_ty: &str,
         arg_tys: &mut [LLVMTypeRef],
+        c_arg_tys: &[&str],
     ) -> bool {
         if !self.intrinsics.contains_key(name.as_ref()) {
+            // for C
+            let args_line = self.c_args(c_arg_tys);
+            (*self.ccontext()).prelude_code.add(format!(
+                "extern {} {}({});",
+                c_ret_ty,
+                c_name,
+                args_line,
+            ));
+            // for LLVM
             let name = CString::new(name.as_ref()).unwrap();
             let fn_type = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
             let function = LLVMAddFunction(self.module, name.as_ptr(), fn_type);

@@ -94,16 +94,32 @@ impl NumericExpressionGenInternal for CGenerator {
         match *ty {
             Scalar(kind) if kind.is_float() => {
                 let name = Intrinsics::llvm_numeric("pow", kind, false);
+                use crate::ast::ScalarKind::{F32, F64};
+                let c_name = match kind {
+                    F32 => "powf",
+                    F64 => "pow",
+                    _ => unreachable!(),
+                };
                 let ret_ty = LLVMTypeOf(left);
+                let c_ret_ty = &self.c_type(&Scalar(kind))? as &str;
                 let mut arg_tys = [ret_ty, ret_ty];
-                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                let c_arg_tys = [c_ret_ty, c_ret_ty];
+                self.intrinsics.add(&name, &c_name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
                 self.intrinsics.call(ctx.builder, name, &mut [left, right])
             }
             Simd(kind) if kind.is_float() => {
                 let name = Intrinsics::llvm_numeric("pow", kind, false);
+                use crate::ast::ScalarKind::{F32, F64};
+                let c_name = match kind {
+                    F32 => "powf",
+                    F64 => "pow",
+                    _ => unreachable!(),
+                };
                 let ret_ty = self.llvm_type(&Scalar(kind))?;
+                let c_ret_ty = &self.c_type(&Scalar(kind))? as &str;
                 let mut arg_tys = [ret_ty, ret_ty];
-                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                let c_arg_tys = [c_ret_ty, c_ret_ty];
+                self.intrinsics.add(&name, &c_name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
                 // Unroll vector and apply function to each element.
                 let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
                 for i in 0..LLVM_VECTOR_WIDTH {
@@ -164,15 +180,42 @@ impl NumericExpressionGen for CGenerator {
                 Simd(kind) => (kind, true),
                 _ => unreachable!(),
             };
+            let c_child = ctx.c_get_value(child)?;
             let child = self.load(ctx.builder, ctx.get_value(child)?)?;
 
             // Use the LLVM intrinsic if one is available, since LLVM may be able to vectorize it.
             // Otherwise, fall back to the libc math variant and unroll SIMD values manually.
             let result = if let Some(name) = op.llvm_intrinsic() {
+                use crate::ast::ScalarKind::{F32, F64};
+                use crate::ast::UnaryOpKind::*;
+                let c_name = match (op, kind) {
+                    (Exp, F32) => "expf",
+                    (Log, F32) => "logf",
+                    (Sqrt, F32) => "sqrtf",
+                    (Sin, F32) => "sinf",
+                    (Cos, F32) => "cosf",
+                    (Exp, F64) => "exp",
+                    (Log, F64) => "log",
+                    (Sqrt, F64) => "sqrt",
+                    (Sin, F64) => "sin",
+                    (Cos, F64) => "cos",
+                    _ => unreachable!(),
+                };
                 let name = Intrinsics::llvm_numeric(name, kind, simd);
                 let ret_ty = LLVMTypeOf(child);
+                let c_ret_ty = &self.c_type(&Scalar(kind))? as &str;
                 let mut arg_tys = [ret_ty];
-                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                let c_arg_tys = [c_ret_ty];
+                self.intrinsics.add(&name, &c_name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
+                // for C
+                let result = self.intrinsics.c_call(
+                    &mut ctx.body, &c_name, &[&c_child], c_ret_ty, None);
+                ctx.body.add(format!(
+                    "{} = {};",
+                    ctx.c_get_value(statement.output.as_ref().unwrap())?,
+                    result,
+                ));
+                // for LLVM
                 self.intrinsics.call(ctx.builder, name, &mut [child])?
             } else {
                 use crate::ast::ScalarKind::{F32, F64};
@@ -197,13 +240,27 @@ impl NumericExpressionGen for CGenerator {
                     _ => unreachable!(),
                 };
                 let ret_ty = self.llvm_type(&Scalar(kind))?;
+                let c_ret_ty = &self.c_type(&Scalar(kind))? as &str;
                 let mut arg_tys = [ret_ty];
-                self.intrinsics.add(&name, ret_ty, &mut arg_tys);
+                let c_arg_tys = [c_ret_ty];
+                self.intrinsics.add(&name, &name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
                 // If the value is a scalar, just call the intrinsic. If it's a SIMD value, unroll
                 // the vector and apply the intrinsic to each element.
                 if !simd {
+                    // for C
+                    let result = self.intrinsics.c_call(
+                        &mut ctx.body, &name, &[&c_child], c_ret_ty, None);
+                    ctx.body.add(format!(
+                        "{} = {};",
+                        ctx.c_get_value(statement.output.as_ref().unwrap())?,
+                        result,
+                    ));
+                    // for LLVM
                     self.intrinsics.call(ctx.builder, name, &mut [child])?
                 } else {
+                    // for C
+                    ctx.body.add(format!("#error UnaryOp of SIMD for {} is not implemented yet", name));
+                    // for LLVM
                     let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
                     for i in 0..LLVM_VECTOR_WIDTH {
                         let element = LLVMBuildExtractElement(

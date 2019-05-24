@@ -235,12 +235,18 @@ impl GenCmp for CGenerator {
                 // Call memcmp
                 let name = "memcmp";
                 let ret_ty = self.i32_type();
+                let c_ret_ty = self.c_i32_type();
                 let arg_tys = &mut [
                     self.void_pointer_type(),
                     self.void_pointer_type(),
                     self.i64_type(),
                 ];
-                if self.intrinsics.add(name, ret_ty, arg_tys) {
+                let c_arg_tys = [
+                    &self.c_void_pointer_type() as &str,
+                    &self.c_void_pointer_type(),
+                    &self.c_i64_type(),
+                ];
+                if self.intrinsics.add(name, name, ret_ty, &c_ret_ty, arg_tys, &c_arg_tys) {
                     let memcmp = self.intrinsics.get(name).unwrap();
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 0);
                     LLVMExtAddAttrsOnParameter(self.context, memcmp, &[ReadOnly, NoCapture], 1);
