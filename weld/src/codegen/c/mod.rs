@@ -1181,7 +1181,7 @@ impl CGenerator {
             input_arg_defined: false,
             output_arg_defined: false,
             run_handle_defined: false,
-            var_ids: IdGenerator::new("t"),
+            var_ids: IdGenerator::new("g"),
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
         });
@@ -1445,12 +1445,17 @@ impl CGenerator {
         // Run the Weld program.
         // for C
         let args_line = self.c_call_args(&c_func_args);
-        self.c_call_sir_function(
-            &mut (*self.ccontext()).body_code,
-            &program.funcs[0],
-            &args_line,
-            None,
-        )?;
+        let ret_ty = self.c_type(&program.funcs[0].return_type)?;
+        let res = (*self.ccontext()).var_ids.next();
+        (*self.ccontext()).body_code.add(format!(
+            "{} {} = {};",
+            ret_ty,
+            res,
+            self.c_call_sir_function(
+                &program.funcs[0],
+                &args_line,
+            ),
+        ));
         // for LLVM
         let entry_function = self.functions[&program.funcs[0].id];
         let inst = LLVMBuildCall(
@@ -1605,24 +1610,11 @@ impl CGenerator {
 
     pub unsafe fn c_call_sir_function(
         &mut self,
-        builder: &mut CodeBuilder,
         func: &SirFunction,
         args_line: &str,
-        result: Option<String>,
-    ) -> WeldResult<String> {
-        if let Some(res) = result {
-            let fun = &self.c_functions[&func.id];
-            builder.add(format!(
-                "{} = {}({});", res, fun, args_line));
-            Ok(res)
-        } else {
-            let res = (*self.ccontext()).var_ids.next();
-            let ret_ty = self.c_type(&func.return_type)?.to_string();
-            let fun = &self.c_functions[&func.id];
-            builder.add(format!(
-                "{} {} = {}({});", ret_ty, res, fun, args_line));
-            Ok(res)
-        }
+    ) -> String {
+        let fun = &self.c_functions[&func.id];
+        format!("{}({});", fun, args_line)
     }
 
     /// Generates the Allocas for a function.
@@ -2748,7 +2740,7 @@ impl<'a> FunctionContext<'a> {
             builder: unsafe { LLVMCreateBuilderInContext(llvm_context) },
             symbols: FnvHashMap::default(),
             blocks: FnvHashMap::default(),
-            var_ids: IdGenerator::new("tt"),
+            var_ids: IdGenerator::new("t"),
             body: CodeBuilder::new(),
             bb_index: 0,
         }

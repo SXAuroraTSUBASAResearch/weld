@@ -136,12 +136,17 @@ impl ForLoopGenInternal for CGenerator {
         // is returned to the current function.
         // for C
         let args_line = self.c_call_args(&c_arguments);
-        let c_builder = self.c_call_sir_function(
-            &mut ctx.body,
-            sir_function,
-            &args_line,
-            None,
-        )?;
+        let c_builder = ctx.var_ids.next();
+        let ret_ty = self.c_type(&sir_function.return_type)?;
+        ctx.body.add(format!(
+            "{} {} = {};",
+            ret_ty,
+            c_builder,
+            self.c_call_sir_function(
+                sir_function,
+                &args_line,
+            ),
+        ));
 
         // for LLVM
         let builder = LLVMBuildCall(
