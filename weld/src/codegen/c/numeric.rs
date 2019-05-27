@@ -80,6 +80,13 @@ trait NumericExpressionGenInternal {
         right: LLVMValueRef,
         ty: &Type,
     ) -> WeldResult<LLVMValueRef>;
+    unsafe fn c_gen_pow(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        left: &str,
+        right: &str,
+        ty: &Type,
+    ) -> WeldResult<String>;
 }
 
 impl NumericExpressionGenInternal for CGenerator {
@@ -90,6 +97,7 @@ impl NumericExpressionGenInternal for CGenerator {
         right: LLVMValueRef,
         ty: &Type,
     ) -> WeldResult<LLVMValueRef> {
+        // for LLVM
         use crate::ast::Type::{Scalar, Simd};
         match *ty {
             Scalar(kind) if kind.is_float() => {
@@ -139,6 +147,74 @@ impl NumericExpressionGenInternal for CGenerator {
                     );
                 }
                 Ok(result)
+            }
+            _ => unreachable!(),
+        }
+    }
+    unsafe fn c_gen_pow(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        left: &str,
+        right: &str,
+        ty: &Type,
+    ) -> WeldResult<String> {
+        // for C
+        use crate::ast::Type::{Scalar, Simd};
+        match *ty {
+            Scalar(kind) if kind.is_float() => {
+                ctx.body.add(format!("#error gen_pow BinOp pow for scalar {} is not tested yet", self.c_type(ty)?));
+                // for LLVM
+                let name = Intrinsics::llvm_numeric("pow", kind, false);
+                use crate::ast::ScalarKind::{F32, F64};
+                let c_name = match kind {
+                    F32 => "powf",
+                    F64 => "pow",
+                    _ => unreachable!(),
+                };
+                let ret_ty = self.llvm_type(&Scalar(kind))?;
+                let c_ret_ty = &self.c_type(&Scalar(kind))? as &str;
+                let mut arg_tys = [ret_ty, ret_ty];
+                let c_arg_tys = [c_ret_ty, c_ret_ty];
+                self.intrinsics.add(&name, &c_name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
+                Ok(self.intrinsics.c_call(&mut ctx.body, &c_name, &[left, right], c_ret_ty, None))
+            }
+            Simd(kind) if kind.is_float() => {
+                // for C
+                ctx.body.add(format!("#error gen_pow BinOp pow for simd {} is not implemented yet", self.c_type(ty)?));
+                // for LLVM
+                let name = Intrinsics::llvm_numeric("pow", kind, false);
+                use crate::ast::ScalarKind::{F32, F64};
+                let c_name = match kind {
+                    F32 => "powf",
+                    F64 => "pow",
+                    _ => unreachable!(),
+                };
+                let ret_ty = self.llvm_type(&Scalar(kind))?;
+                let c_ret_ty = &self.c_type(&Scalar(kind))? as &str;
+                let mut arg_tys = [ret_ty, ret_ty];
+                let c_arg_tys = [c_ret_ty, c_ret_ty];
+                self.intrinsics.add(&name, &c_name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
+                /*
+                // Unroll vector and apply function to each element.
+                let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
+                for i in 0..LLVM_VECTOR_WIDTH {
+                    let base =
+                        LLVMBuildExtractElement(ctx.builder, left, self.i32(i as i32), c_str!(""));
+                    let power =
+                        LLVMBuildExtractElement(ctx.builder, right, self.i32(i as i32), c_str!(""));
+                    let value = self
+                        .intrinsics
+                        .call(ctx.builder, &name, &mut [base, power])?;
+                    result = LLVMBuildInsertElement(
+                        ctx.builder,
+                        result,
+                        value,
+                        self.i32(i as i32),
+                        c_str!(""),
+                    );
+                }
+                */
+                Ok("not implemented".to_string() /* result */)
             }
             _ => unreachable!(),
         }
@@ -365,6 +441,21 @@ impl NumericExpressionGen for CGenerator {
             let ty = ctx.sir_function.symbol_type(left)?;
             let result = match *ty {
                 Scalar(_) | Simd(_) => {
+                    // for C
+                    let c_left = ctx.c_get_value(left)?;
+                    let c_right = ctx.c_get_value(right)?;
+                    let result = match op {
+                        BinOpKind::Pow => self.c_gen_pow(ctx, &c_left, &c_right, ty)?,
+                        _ => c_gen_binop(op, &c_left, &c_right, ty)?,
+                    };
+                    let output = ctx.c_get_value(statement.output.as_ref().unwrap())?;
+                    ctx.body.add(format!(
+                        "{} = {};",
+                        output,
+                        result,
+                    ));
+
+                    // for LLVM
                     let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
                     let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
                     let result = match op {
@@ -380,6 +471,9 @@ impl NumericExpressionGen for CGenerator {
                     }
                 }
                 Vector(_) | Struct(_) if op.is_comparison() => {
+                    // for C
+                    ctx.body.add(format!("#error vector/struct BinOp cmp for {} is not implemented yet", self.c_type(ty)?));
+                    // for LLVM
                     // Note that we assume structs being compared have the same type.
                     let result = match op {
                         BinOpKind::Equal | BinOpKind::NotEqual => {
@@ -701,6 +795,73 @@ pub unsafe fn gen_binop(
                 let compare = gen_binop(builder, LessThanOrEqual, left, right, ty)?;
                 LLVMBuildSelect(builder, compare, left, right, c_str!(""))
             }
+
+            _ => return compile_err!("Unsupported binary op: {} on {}", op, ty),
+        },
+        _ => return compile_err!("Unsupported binary op: {} on {}", op, ty),
+    };
+    Ok(result)
+}
+pub unsafe fn c_gen_binop(
+    op: BinOpKind,
+    left: &str,
+    right: &str,
+    ty: &Type,
+) -> WeldResult<String> {
+    use crate::ast::BinOpKind::*;
+    use crate::ast::Type::*;
+    let result = match *ty {
+        Scalar(s) | Simd(s) => match op {
+            Add if s.is_integer() => format!("{} + {}", left, right),
+            Add if s.is_float() => format!("{} + {}", left, right),
+
+            Subtract if s.is_integer() => format!("{} - {}", left, right),
+            Subtract if s.is_float() => format!("{} - {}", left, right),
+
+            Multiply if s.is_integer() => format!("{} * {}", left, right),
+            Multiply if s.is_float() => format!("{} * {}", left, right),
+
+            Divide if s.is_signed_integer() => format!("{} / {}", left, right),
+            Divide if s.is_unsigned_integer() => format!("{} / {}", left, right),
+            Divide if s.is_float() => format!("{} / {}", left, right),
+
+            Modulo if s.is_signed_integer() => format!("{} % {}", left, right),
+            Modulo if s.is_unsigned_integer() => format!("{} % {}", left, right),
+            Modulo if s.is_float() => format!("{} % {}", left, right),
+
+            Equal if s.is_integer() || s.is_bool() => format!("{} == {}", left, right),
+            Equal if s.is_float() => format!("{} == {}", left, right),
+
+            NotEqual if s.is_integer() || s.is_bool() => format!("{} != {}", left, right),
+            NotEqual if s.is_float() => format!("{} != {}", left, right),
+
+            LessThan if s.is_signed_integer() => format!("{} < {}", left, right),
+            LessThan if s.is_unsigned_integer() => format!("{} < {}", left, right),
+            LessThan if s.is_float() => format!("{} < {}", left, right),
+
+            LessThanOrEqual if s.is_signed_integer() => format!("{} <= {}", left, right),
+            LessThanOrEqual if s.is_unsigned_integer() => format!("{} <= {}", left, right),
+            LessThanOrEqual if s.is_float() => format!("{} <= {}", left, right),
+
+            GreaterThan if s.is_signed_integer() => format!("{} > {}", left, right),
+            GreaterThan if s.is_unsigned_integer() => format!("{} > {}", left, right),
+            GreaterThan if s.is_float() => format!("{} > {}", left, right),
+
+            GreaterThanOrEqual if s.is_signed_integer() => format!("{} >= {}", left, right),
+            GreaterThanOrEqual if s.is_unsigned_integer() => format!("{} >= {}", left, right),
+            GreaterThanOrEqual if s.is_float() => format!("{} >= {}", left, right),
+
+            LogicalAnd if s.is_bool() => format!("{} && {}", left, right),
+            BitwiseAnd if s.is_integer() || s.is_bool() => format!("{} & {}", left, right),
+
+            LogicalOr if s.is_bool() => format!("{} || {}", left, right),
+            BitwiseOr if s.is_integer() || s.is_bool() => format!("{} | {}", left, right),
+
+            Xor if s.is_integer() || s.is_bool() => format!("{} ^ {}", left, right),
+
+            Max => format!("{} >= {} ? {} : {}", left, right, left, right),
+
+            Min => format!("{} <= {} ? {} : {}", left, right, left, right),
 
             _ => return compile_err!("Unsupported binary op: {} on {}", op, ty),
         },

@@ -1729,10 +1729,7 @@ impl CGenerator {
                 self.gen_assign_literal(context, statement)
             }
             BinOp { .. } => {
-                // for C
-                context.body.add("#error BinOp is not implemented yet");
-
-                // for LLVM
+                // for C and LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_binop(context, statement)
             }
@@ -2276,6 +2273,7 @@ impl CGenerator {
                 Ok(())
             }
             UnaryOp { .. } => {
+                // for C and LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_unaryop(context, statement)
             }
