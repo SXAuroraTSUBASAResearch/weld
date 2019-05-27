@@ -9,7 +9,6 @@
 use fnv;
 use libc;
 use llvm_sys;
-use code_builder::CodeBuilder;
 
 use fnv::FnvHashMap;
 
@@ -209,34 +208,11 @@ impl Intrinsics {
     /// Convinience wrapper for calling any functions.
     pub unsafe fn c_call(
         &mut self,
-        builder: &mut CodeBuilder,
         fun: &str,
         args: &[&str],
-        ret_ty: &str,
-        result: Option<String>,
     ) -> String {
         let args_line = self.c_args(args);
-        if let Some(res) = result {
-            builder.add(format!(
-                "{} = {}({});", res, fun, args_line));
-            res
-        } else {
-            let res = (*self.ccontext()).var_ids.next();
-            builder.add(format!(
-                "{} {} = {}({});", ret_ty, res, fun, args_line));
-            res
-        }
-    }
-
-    pub unsafe fn c_call_void(
-        &mut self,
-        builder: &mut CodeBuilder,
-        fun: &str,
-        args: &[&str],
-    ) {
-        let args_line = self.c_args(args);
-        builder.add(format!(
-            "(void){}({});", fun, args_line));
+        format!("{}({})", fun, args_line)
     }
 
     /// Convinience wrapper for calling the `weld_run_init` intrinsic.
@@ -258,14 +234,11 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_init(
         &mut self,
-        builder: &mut CodeBuilder,
         nworkers: &str,
         memlimit: &str,
-        name: Option<String>,
     ) -> String {
         let args = [nworkers, memlimit];
-        let ret_type = &self.c_run_handle_type();
-        self.c_call(builder, "weld_runst_init", &args, ret_type, name)
+        self.c_call("weld_runst_init", &args)
     }
 
     /// Convinience wrapper for calling the `weld_run_get_result` intrinsic.
@@ -286,13 +259,10 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_get_result(
         &mut self,
-        builder: &mut CodeBuilder,
         run: &str,
-        name: Option<String>,
     ) -> String {
         let args = [run];
-        let ret_type = &self.c_void_pointer_type();
-        self.c_call(builder, "weld_runst_get_result", &args, ret_type, name)
+        self.c_call("weld_runst_get_result", &args)
     }
 
     /// Convinience wrapper for calling the `weld_run_set_result` intrinsic.
@@ -314,14 +284,11 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_set_result(
         &mut self,
-        builder: &mut CodeBuilder,
         run: &str,
         pointer: &str,
-        name: Option<String>,
     ) -> String {
         let args = [run, pointer];
-        let ret_type = &self.c_void_pointer_type();
-        self.c_call(builder, "weld_runst_set_result", &args, ret_type, name)
+        self.c_call("weld_runst_set_result", &args)
     }
 
     /// Convinience wrapper for calling the `weld_run_malloc` intrinsic.
@@ -343,14 +310,11 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_malloc(
         &mut self,
-        builder: &mut CodeBuilder,
         run: &str,
         size: &str,
-        name: Option<String>,
     ) -> String {
         let args = [run, size];
-        let ret_type = &self.c_void_pointer_type();
-        self.c_call(builder, "weld_runst_malloc", &args, ret_type, name)
+        self.c_call("weld_runst_malloc", &args)
     }
 
 
@@ -374,15 +338,12 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_realloc(
         &mut self,
-        builder: &mut CodeBuilder,
         run: &str,
         pointer: &str,
         size: &str,
-        name: Option<String>,
     ) -> String {
         let args = [run, pointer, size];
-        let ret_type = &self.c_void_pointer_type();
-        self.c_call(builder, "weld_runst_realloc", &args, ret_type, name)
+        self.c_call("weld_runst_realloc", &args)
     }
 
     /// Convinience wrapper for calling the `weld_run_free` intrinsic.
@@ -420,12 +381,10 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_get_errno(
         &mut self,
-        builder: &mut CodeBuilder,
         run: &str,
-        name: Option<String>,
     ) -> String {
         let args = [run];
-        self.c_call(builder, "weld_runst_get_errno", &args, "i64", name)
+        self.c_call("weld_runst_get_errno", &args)
     }
 
     /// Convinience wrapper for calling the `weld_runst_set_errno` intrinsic.
@@ -447,13 +406,11 @@ impl Intrinsics {
     }
     pub unsafe fn c_call_weld_run_set_errno(
         &mut self,
-        builder: &mut CodeBuilder,
         run: &str,
         errno: &str,
-        _name: Option<String>,
-    ) {
+    ) -> String {
         let args = [run, errno];
-        self.c_call_void(builder, "weld_runst_set_errno", &args)
+        self.c_call("weld_runst_set_errno", &args)
     }
 
     /// Convinience wrapper for calling the `weld_runst_assert` intrinsic.

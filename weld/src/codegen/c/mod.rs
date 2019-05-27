@@ -1348,12 +1348,14 @@ impl CGenerator {
 
         // Generate codes for init_run block.
         // for C
-        self.intrinsics.c_call_weld_run_init(
-            &mut (*self.ccontext()).body_code,
-            "input->nworkers",
-            "input->memlimit",
-            Some("run".to_string()),
-        );
+        (*self.ccontext()).body_code.add(format!(
+            "{} = {};",
+            "run",
+            self.intrinsics.c_call_weld_run_init(
+                "input->nworkers",
+                "input->memlimit",
+            ),
+        ));
         (*self.ccontext()).body_code.add("}");
         // for LLVM
         LLVMPositionBuilderAtEnd(builder, init_run_block);
@@ -1462,20 +1464,23 @@ impl CGenerator {
 
         // Get the results, errno, and run.
         // for C
-        let res = self.intrinsics.c_call_weld_run_get_result(
-            &mut (*self.ccontext()).body_code,
-            "run",
-            None,
-        );
+        let res = (*self.ccontext()).var_ids.next();
+        (*self.ccontext()).body_code.add(format!(
+            "void* {} = {};",
+            res,
+            self.intrinsics.c_call_weld_run_get_result("run"),
+        ));
         let c_result = (*self.ccontext()).var_ids.next();
         (*self.ccontext()).body_code.add(format!(
             "{i64} {result} = ({i64}){res};",
             i64=self.c_i64_type(), result=c_result, res=res));
-        let c_errno = self.intrinsics.c_call_weld_run_get_errno(
-            &mut (*self.ccontext()).body_code,
-            "run",
-            None,
-        );
+        let c_errno = (*self.ccontext()).var_ids.next();
+        (*self.ccontext()).body_code.add(format!(
+            "{} {} = {};",
+            self.c_i64_type(),
+            c_errno,
+            self.intrinsics.c_call_weld_run_get_errno("run"),
+        ));
         let c_run_int = (*self.ccontext()).var_ids.next();
         (*self.ccontext()).body_code.add(format!(
             "{i64} {run_int} = ({i64})run;",
@@ -1491,14 +1496,13 @@ impl CGenerator {
         // Generate Output
         // for C
         let return_size = self.c_size_of(c_output_type);
-        let return_pointer = self
-            .intrinsics
-            .c_call_weld_run_malloc(
-                &mut (*self.ccontext()).body_code,
-                "run",
-                &return_size,
-                None,
-            );
+        let return_pointer = (*self.ccontext()).var_ids.next();
+        (*self.ccontext()).body_code.add(format!(
+            "{} {} = {};",
+            "void*",
+            return_pointer,
+            self.intrinsics.c_call_weld_run_malloc("run", &return_size),
+        ));
         (*self.ccontext()).body_code.add(format!("{output}* output = ({output}*){ptr};", output=c_output_type, ptr=return_pointer));
         (*self.ccontext()).body_code.add(format!(
             "output->output = {};", c_result));
@@ -2382,28 +2386,22 @@ impl CGenerator {
                 let run = context.c_get_run();
                 let ty = self.c_type_of(&value);
                 let size = self.c_size_of(&ty);
-                let bytes = self
-                    .intrinsics
-                    .c_call_weld_run_malloc(
-                        &mut context.body,
-                        run,
-                        &size,
-                        None,
-                    );
+                let bytes = context.var_ids.next();
+                context.body.add(format!(
+                    "void* {} = {};",
+                    bytes,
+                    self.intrinsics.c_call_weld_run_malloc(run, &size),
+                ));
                 context.body.add(format!(
                     "*({}){} = {};",
                     self.c_pointer_type(&ty),
                     bytes,
                     value,
                 ));
-                let _ = self
-                    .intrinsics
-                    .c_call_weld_run_set_result(
-                        &mut context.body,
-                        run,
-                        &bytes,
-                        None,
-                    );
+                context.body.add(format!(
+                    "{};",
+                    self.intrinsics.c_call_weld_run_set_result(run, &bytes),
+                ));
                 context.body.add(format!(
                     "return {};",
                     value,
@@ -2750,7 +2748,7 @@ impl<'a> FunctionContext<'a> {
             builder: unsafe { LLVMCreateBuilderInContext(llvm_context) },
             symbols: FnvHashMap::default(),
             blocks: FnvHashMap::default(),
-            var_ids: IdGenerator::new("t"),
+            var_ids: IdGenerator::new("tt"),
             body: CodeBuilder::new(),
             bb_index: 0,
         }

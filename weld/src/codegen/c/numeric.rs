@@ -176,7 +176,15 @@ impl NumericExpressionGenInternal for CGenerator {
                 let mut arg_tys = [ret_ty, ret_ty];
                 let c_arg_tys = [c_ret_ty, c_ret_ty];
                 self.intrinsics.add(&name, &c_name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
-                Ok(self.intrinsics.c_call(&mut ctx.body, &c_name, &[left, right], c_ret_ty, None))
+                let result = (*self.ccontext()).var_ids.next();
+                let call = self.intrinsics.c_call(&c_name, &[left, right]);
+                ctx.body.add(format!(
+                    "{} {} = {};",
+                    c_ret_ty,
+                    result,
+                    call,
+                ));
+                Ok(result)
             }
             Simd(kind) if kind.is_float() => {
                 // for C
@@ -284,12 +292,11 @@ impl NumericExpressionGen for CGenerator {
                 let c_arg_tys = [c_ret_ty];
                 self.intrinsics.add(&name, &c_name, ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys);
                 // for C
-                let result = self.intrinsics.c_call(
-                    &mut ctx.body, &c_name, &[&c_child], c_ret_ty, None);
+                let call = self.intrinsics.c_call(&c_name, &[&c_child]);
                 ctx.body.add(format!(
                     "{} = {};",
                     ctx.c_get_value(statement.output.as_ref().unwrap())?,
-                    result,
+                    call,
                 ));
                 // for LLVM
                 self.intrinsics.call(ctx.builder, name, &mut [child])?
@@ -324,12 +331,11 @@ impl NumericExpressionGen for CGenerator {
                 // the vector and apply the intrinsic to each element.
                 if !simd {
                     // for C
-                    let result = self.intrinsics.c_call(
-                        &mut ctx.body, &name, &[&c_child], c_ret_ty, None);
+                    let call = self.intrinsics.c_call(&name, &[&c_child]);
                     ctx.body.add(format!(
                         "{} = {};",
                         ctx.c_get_value(statement.output.as_ref().unwrap())?,
-                        result,
+                        call,
                     ));
                     // for LLVM
                     self.intrinsics.call(ctx.builder, name, &mut [child])?

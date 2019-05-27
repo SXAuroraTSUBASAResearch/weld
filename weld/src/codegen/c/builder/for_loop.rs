@@ -257,8 +257,10 @@ impl ForLoopGenInternal for CGenerator {
         ctx.body.add(format!("{}:", c_fail_boundscheck_block));
         let error = WeldRuntimeErrno::BadIteratorLength.to_string();
         let run = ctx.c_get_run();
-        self.intrinsics.c_call_weld_run_set_errno(
-            &mut ctx.body, run, &error, None);
+        ctx.body.add(format!(
+            "{};",
+            self.intrinsics.c_call_weld_run_set_errno(run, &error),
+        ));
         // for LLVM
         LLVMPositionBuilderAtEnd(ctx.builder, fail_boundscheck_block);
         let error = self.i64(WeldRuntimeErrno::BadIteratorLength as i64);
@@ -269,8 +271,10 @@ impl ForLoopGenInternal for CGenerator {
         // for C
         ctx.body.add(format!("{}:", c_fail_zip_block));
         let error = WeldRuntimeErrno::MismatchedZipSize.to_string();
-        self.intrinsics.c_call_weld_run_set_errno(
-            &mut ctx.body, run, &error, None);
+        ctx.body.add(format!(
+            "{};",
+            self.intrinsics.c_call_weld_run_set_errno(run, &error),
+        ));
         // for LLVM
         LLVMPositionBuilderAtEnd(ctx.builder, fail_zip_block);
         let error = self.i64(WeldRuntimeErrno::MismatchedZipSize as i64);

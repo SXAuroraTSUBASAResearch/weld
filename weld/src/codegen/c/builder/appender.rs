@@ -174,16 +174,16 @@ impl Appender {
             c_code.add("{");
             // let elem_size = self.size_of(self.elem_ty);
             c_code.add(format!("{} ret;", self.name));
-            let bytes = intrinsics.c_call_weld_run_malloc(
-                &mut c_code,
-                &self.c_get_run(),
-                &format!("{capacity} * {elem_size}",
-                         capacity=self.c_get_param(0),
-                         elem_size=self.c_size_of(&self.c_elem_ty),
+            c_code.add(format!(
+                "ret.data = {};",
+                intrinsics.c_call_weld_run_malloc(
+                    &self.c_get_run(),
+                    &format!("{capacity} * {elem_size}",
+                             capacity=self.c_get_param(0),
+                             elem_size=self.c_size_of(&self.c_elem_ty),
+                    ),
                 ),
-                None,
-            );
-            c_code.add(format!("ret.data = {};", bytes));
+            ));
             c_code.add("ret.size = 0;");
             c_code.add(format!("ret.capacity = {};", self.c_get_param(0)));
             c_code.add("return ret;");
@@ -301,13 +301,15 @@ impl Appender {
             u64=self.c_u64_type(),
             app=appender,
         ));
-        let _ = intrinsics.c_call_weld_run_realloc(
-            &mut c_code,
-            &run_handle,
-            &format!("{app}->data", app=appender),
-            "newCap",
-            Some(format!("{}->data", appender)),
-        );
+        c_code.add(format!(
+            "{} = {};",
+            format!("{}->data", appender),
+            intrinsics.c_call_weld_run_realloc(
+                &run_handle,
+                &format!("{app}->data", app=appender),
+                "newCap",
+            ),
+        ));
         c_code.add(format!(
             "{app}->capacity = newCap;",
             app=appender,
