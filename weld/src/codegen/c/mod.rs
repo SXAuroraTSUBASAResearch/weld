@@ -1884,7 +1884,7 @@ impl CGenerator {
             GetField { ref value, index } => {
                 // for C
                 context.body.add(format!(
-                    "{} = {}->f{};",
+                    "{} = {}.f{};",
                     context.c_get_value(output)?,
                     context.c_get_value(value)?,
                     index,
@@ -2055,7 +2055,7 @@ impl CGenerator {
                 for (i, elem) in elems.iter().enumerate() {
                     // for C
                     context.body.add(format!(
-                        "{}->f{} = {};",
+                        "{}.f{} = {};",
                         c_output_pointer,
                         i,
                         context.c_get_value(elem)?,

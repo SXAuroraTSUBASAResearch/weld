@@ -183,9 +183,9 @@ impl Appender {
                 ),
                 None,
             );
-            c_code.add(format!("ret->data = {};", bytes));
-            c_code.add("ret->size = 0;");
-            c_code.add(format!("ret->capacity = {};", self.c_get_param(0)));
+            c_code.add(format!("ret.data = {};", bytes));
+            c_code.add("ret.size = 0;");
+            c_code.add(format!("ret.capacity = {};", self.c_get_param(0)));
             c_code.add("return ret;");
             c_code.add("}");
             (*self.ccontext()).prelude_code.add(c_code.result());
@@ -291,7 +291,7 @@ impl Appender {
         c_code.add("{");
         let appender = self.c_get_param(0);
         let merge_value = self.c_get_param(1);
-        let run_handle = self.c_get_param(2);
+        let run_handle = self.c_get_run();
         c_code.add(format!(
             "if ({app}->size + 1 > {app}->capacity) {{",
             app=appender,
@@ -498,8 +498,8 @@ impl Appender {
             c_code.add(format!("{} ret;", c_vector_ty));
             let appender = self.c_get_param(0);
             let pointer = self.c_gen_index(&appender, None)?;
-            c_code.add(format!("ret->data = {};", pointer));
-            c_code.add(format!("ret->size = {}->size;", appender));
+            c_code.add(format!("ret.data = {};", pointer));
+            c_code.add(format!("ret.size = {}->size;", appender));
             c_code.add("return ret;");
             c_code.add("}");
             (*self.ccontext()).prelude_code.add(c_code.result());

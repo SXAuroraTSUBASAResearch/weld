@@ -659,7 +659,7 @@ impl ForLoopGenInternal for CGenerator {
         if c_values.len() > 1 {
             for (i, value) in c_values.into_iter().enumerate() {
                 ctx.body.add(format!(
-                    "{}->f{} = {};",
+                    "{}.f{} = {};",
                     c_e,
                     i,
                     value,
