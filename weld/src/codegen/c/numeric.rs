@@ -569,6 +569,37 @@ impl NumericExpressionGen for CGenerator {
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let output_type = ctx.sir_function.symbol_type(output)?;
+            // for C
+            let result = if let LiteralKind::StringLiteral(ref val) = value {
+                ctx.body.add(format!("#error gen_assign_literal for StringLiteral {} is not implemented yet", val));
+                /*
+                let c_str = CString::new(val.as_str()).unwrap();
+                // Add one for the NULL-byte!
+                let len = (c_str.to_bytes().len() + 1) as i64;
+                let string = self.gen_global_string(ctx.builder, c_str);
+                let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
+                let methods = &self.vectors[&Type::Scalar(ScalarKind::I8)];
+                methods.const_literal_from_parts(pointer, self.i64(len))
+                */
+                "not implemented".to_string()
+            } else {
+                self.c_scalar_literal(value)
+            };
+            if let Type::Simd(_) = output_type {
+                ctx.body.add(format!("#error gen_assign_literal for simd {} is not implemented yet", self.c_type(output_type)?));
+                /*
+                result = LLVMConstVector(
+                    [result; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(),
+                    LLVM_VECTOR_WIDTH,
+                )
+                */
+            }
+            ctx.body.add(format!(
+                "{} = {};",
+                ctx.c_get_value(output)?,
+                result,
+            ));
+            // for LLVM
             let mut result = if let LiteralKind::StringLiteral(ref val) = value {
                 let c_str = CString::new(val.as_str()).unwrap();
                 // Add one for the NULL-byte!

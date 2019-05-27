@@ -722,6 +722,24 @@ pub trait CodeGenExt {
             StringLiteral(_) => unreachable!(),
         }
     }
+    unsafe fn c_scalar_literal(&self, kind: &LiteralKind) -> String {
+        use crate::ast::LiteralKind::*;
+        match *kind {
+            BoolLiteral(val) => self.c_bool(val),
+            I8Literal(val) => self.c_i8(val),
+            I16Literal(val) => self.c_i16(val),
+            I32Literal(val) => self.c_i32(val),
+            I64Literal(val) => self.c_i64(val),
+            U8Literal(val) => self.c_u8(val),
+            U16Literal(val) => self.c_u16(val),
+            U32Literal(val) => self.c_u32(val),
+            U64Literal(val) => self.c_u64(val),
+            F32Literal(val) => self.c_f32(f32::from_bits(val)),
+            F64Literal(val) => self.c_f64(f64::from_bits(val)),
+            // Handled by the `gen_numeric`.
+            StringLiteral(_) => unreachable!(),
+        }
+    }
 
     /// Returns the identity for a given scalar kind and binary operator.
     unsafe fn binop_identity(&self, op: BinOpKind, kind: ScalarKind) -> WeldResult<LLVMValueRef> {
@@ -921,6 +939,98 @@ pub trait CodeGenExt {
         c_run_handle_type(self.ccontext())
     }
 
+    unsafe fn c_bool<T: Into<bool>>(&self, v: T) -> String {
+        { if v.into() { "1" } else { "0" } }.to_string()
+    }
+
+    unsafe fn c_i1<T: Into<bool>>(&self, v: T) -> String {
+        { if v.into() { "1" } else { "0" } }.to_string()
+    }
+
+    unsafe fn c_i8<T: Into<i8>>(&self, v: T) -> String {
+        v.into().to_string()
+    }
+
+    unsafe fn c_u8(&self, v: u8) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_i16(&self, v: i16) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_u16(&self, v: u16) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_i32(&self, v: i32) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_u32(&self, v: u32) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_i64(&self, v: i64) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_u64(&self, v: u64) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_f32(&self, v: f32) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_f64(&self, v: f64) -> String {
+        v.to_string()
+    }
+
+    unsafe fn c_null_ptr(&self, ty: &str) -> String {
+        format!("(({})0)", ty)
+    }
+
+    fn c_get_param(&self, index: usize) -> String {
+        format!("p{}", index)
+    }
+
+    fn c_get_run(&self) -> &'static str {
+        "run"
+    }
+
+    /// Helper functions to treate arguments.
+    fn c_call_args(&mut self, args: &[String]) -> String {
+        let mut args_line = String::new();
+        let mut last_arg: &str = "";
+        for arg in args {
+            if !last_arg.is_empty() {
+                args_line = format!("{}{}, ", args_line, last_arg);
+            }
+            last_arg = arg;
+        }
+        format!("{}{}", args_line, last_arg)
+    }
+
+    unsafe fn c_define_args(&mut self, arg_tys: &[String]) -> String {
+        let mut args_line = String::new();
+        let mut last_arg: &str = "";
+        let mut last_i = 0;
+        for (i, arg) in arg_tys.iter().enumerate() {
+            if i != 0 {
+                args_line = format!("{}{} {}, ", args_line, last_arg, self.c_get_param(last_i));
+            }
+            last_arg = arg;
+            last_i = i;
+        }
+        if self.c_run_handle_type() == last_arg {
+            // Write "run" as parameter if the type of last arg is "RunHandle*".
+            format!("{}{} run", args_line, last_arg)
+        } else {
+            format!("{}{} {}", args_line, last_arg, self.c_get_param(last_i))
+        }
+    }
+
     /// Booleans are represented as `i8`.
     ///
     /// For instructions that require `i1` (e.g, conditional branching or select), the caller
@@ -1042,45 +1152,6 @@ pub trait CodeGenExt {
 
     unsafe fn null_ptr(&self, ty: LLVMTypeRef) -> LLVMValueRef {
         LLVMConstPointerNull(LLVMPointerType(ty, 0))
-    }
-
-    fn c_get_param(&self, index: usize) -> String {
-        format!("p{}", index)
-    }
-
-    fn c_get_run(&self) -> &'static str {
-        "run"
-    }
-
-    /// Helper functions to treate arguments.
-    fn c_call_args(&mut self, args: &[String]) -> String {
-        let mut args_line = String::new();
-        let mut last_arg: &str = "";
-        for arg in args {
-            if !last_arg.is_empty() {
-                args_line = format!("{}{}, ", args_line, last_arg);
-            }
-            last_arg = arg;
-        }
-        format!("{}{}", args_line, last_arg)
-    }
-    unsafe fn c_define_args(&mut self, arg_tys: &[String]) -> String {
-        let mut args_line = String::new();
-        let mut last_arg: &str = "";
-        let mut last_i = 0;
-        for (i, arg) in arg_tys.iter().enumerate() {
-            if i != 0 {
-                args_line = format!("{}{} {}, ", args_line, last_arg, self.c_get_param(last_i));
-            }
-            last_arg = arg;
-            last_i = i;
-        }
-        if self.c_run_handle_type() == last_arg {
-            // Write "run" as parameter if the type of last arg is "RunHandle*".
-            format!("{}{} run", args_line, last_arg)
-        } else {
-            format!("{}{} {}", args_line, last_arg, self.c_get_param(last_i))
-        }
     }
 }
 
@@ -1721,10 +1792,7 @@ impl CGenerator {
                 Ok(())
             }
             AssignLiteral(_) => {
-                // for C
-                context.body.add("#error AssignLiteral is not implemented yet");
-
-                // for LLVM
+                // for C and LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_assign_literal(context, statement)
             }
