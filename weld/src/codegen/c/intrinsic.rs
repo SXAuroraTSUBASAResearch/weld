@@ -453,7 +453,7 @@ impl Intrinsics {
         _name: Option<String>,
     ) {
         let args = [run, errno];
-        self.c_call_void(builder, "weld_runst_get_errno", &args)
+        self.c_call_void(builder, "weld_runst_set_errno", &args)
     }
 
     /// Convinience wrapper for calling the `weld_runst_assert` intrinsic.
