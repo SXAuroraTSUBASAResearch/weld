@@ -17,6 +17,7 @@ use self::llvm_sys::prelude::*;
 use self::llvm_sys::LLVMIntPredicate::*;
 use self::llvm_sys::LLVMTypeKind;
 
+use crate::ast::Type;
 use crate::codegen::c::intrinsic::Intrinsics;
 use crate::codegen::c::llvm_exts::*;
 use crate::codegen::c::CodeGenExt;
@@ -249,11 +250,11 @@ impl Appender {
     /// Internal merge function generation that supports vectorization.
     ///
     /// Returns an `LLVMValueRef` representing the generated merge function.
-    unsafe fn gen_merge_internal(
+    unsafe fn define_merge(
         &mut self,
         intrinsics: &mut Intrinsics,
         vectorized: bool,
-    ) -> WeldResult<LLVMValueRef> {
+    ) -> WeldResult<()> {
         // Number of elements merged in at once.
         let (merge_ty, c_merge_ty, num_elements) = if vectorized {
             (
@@ -265,10 +266,11 @@ impl Appender {
             (self.elem_ty, self.c_elem_ty.clone(), 1)
         };
 
+        // use C name
         let name = if vectorized {
-            format!("{}.vmerge", self.name)
+            format!("{}_vmerge", self.name)
         } else {
-            format!("{}.merge", self.name)
+            format!("{}_merge", self.name)
         };
 
         let mut arg_tys = [
@@ -283,8 +285,51 @@ impl Appender {
         ];
         let ret_ty = LLVMVoidTypeInContext(self.context);
         let c_ret_ty = &self.c_void_type();
-        let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+        let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
 
+        // for C
+        c_code.add("{");
+        let appender = self.c_get_param(0);
+        let merge_value = self.c_get_param(1);
+        let run_handle = self.c_get_param(2);
+        c_code.add(format!(
+            "if ({app}->size + 1 > {app}->capacity) {{",
+            app=appender,
+        ));
+        c_code.add(format!(
+            "{u64} newCap = {app}->capacity * 2;",
+            u64=self.c_u64_type(),
+            app=appender,
+        ));
+        let _ = intrinsics.c_call_weld_run_realloc(
+            &mut c_code,
+            &run_handle,
+            &format!("{app}->data", app=appender),
+            "newCap",
+            Some(format!("{}->data", appender)),
+        );
+        c_code.add(format!(
+            "{app}->capacity = newCap;",
+            app=appender,
+        ));
+        c_code.add("}");
+        c_code.add(format!(
+            "{app}->data[{app}->size] = {val};",
+            app=appender,
+            val=merge_value,
+        ));
+        c_code.add(format!(
+            "++{app}->size;",
+            app=appender,
+        ));
+        c_code.add("}");
+        (*self.ccontext()).prelude_code.add(c_code.result());
+        if vectorized {
+            self.c_vmerge = name;
+        } else {
+            self.c_merge = name;
+        }
+        // for LLVM
         LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
 
         let full_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("isFull"));
@@ -358,7 +403,12 @@ impl Appender {
         LLVMBuildRetVoid(builder);
 
         LLVMDisposeBuilder(builder);
-        Ok(function)
+        if vectorized {
+            self.vmerge = Some(function);
+        } else {
+            self.merge = Some(function);
+        }
+        Ok(())
     }
 
     /// Generates code to merge a value into an appender.
@@ -372,9 +422,9 @@ impl Appender {
     ) -> WeldResult<LLVMValueRef> {
         let vectorized = LLVMGetTypeKind(LLVMTypeOf(value_arg)) == LLVMTypeKind::LLVMVectorTypeKind;
         if vectorized && self.vmerge.is_none() {
-            self.vmerge = Some(self.gen_merge_internal(intrinsics, true)?);
+            self.define_merge(intrinsics, true)?;
         } else if !vectorized && self.merge.is_none() {
-            self.merge = Some(self.gen_merge_internal(intrinsics, false)?);
+            self.define_merge(intrinsics, false)?;
         }
 
         let mut args = [builder_arg, value_arg, run_arg];
@@ -395,6 +445,31 @@ impl Appender {
                 c_str!(""),
             ))
         }
+    }
+    pub unsafe fn c_gen_merge(
+        &mut self,
+        _builder: LLVMBuilderRef,
+        intrinsics: &mut Intrinsics,
+        run_arg: &str,
+        builder_arg: &str,
+        value_arg: &str,
+        ty: &Type,
+    ) -> WeldResult<String> {
+        use crate::ast::Type::Simd;
+        let vectorized = if let Simd(_) = ty { true } else { false };
+        if vectorized && self.vmerge.is_none() {
+            self.define_merge(intrinsics, true)?;
+        } else if !vectorized && self.merge.is_none() {
+            self.define_merge(intrinsics, false)?;
+        }
+
+        Ok(format!(
+            "{}(&{}, {}, {})",
+            if vectorized { &self.c_vmerge } else { &self.c_merge },
+            builder_arg,
+            value_arg,
+            run_arg,
+        ))
     }
 
     /// Generates code to get the result from an appender.

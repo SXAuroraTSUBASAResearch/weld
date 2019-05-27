@@ -331,11 +331,22 @@ impl BuilderExpressionGen for CGenerator {
     ) -> WeldResult<()> {
         let m = MergeStatement::extract(statement, ctx.sir_function)?;
         let builder_pointer = ctx.get_value(m.builder)?;
+        let c_builder_pointer = ctx.c_get_value(m.builder)?;
         match *m.kind {
-            Appender(_) => {
+            Appender(ref ty) => {
                 // for C
-                ctx.body.add(
-                    "#error Merge for Appender is not implemented yet");
+                let methods = self.appenders.get_mut(m.kind).unwrap();
+                ctx.body.add(format!(
+                    "{};",
+                    methods.c_gen_merge(
+                        ctx.builder,
+                        &mut self.intrinsics,
+                        ctx.c_get_run(),
+                        &c_builder_pointer,
+                        &ctx.c_get_value(m.value)?,
+                        ty,
+                    )?,
+                ));
 
                 // for LLVM
                 let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;

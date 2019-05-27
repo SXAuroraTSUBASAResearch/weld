@@ -372,6 +372,18 @@ impl Intrinsics {
             name.unwrap_or(c_str!("")),
         )
     }
+    pub unsafe fn c_call_weld_run_realloc(
+        &mut self,
+        builder: &mut CodeBuilder,
+        run: &str,
+        pointer: &str,
+        size: &str,
+        name: Option<String>,
+    ) -> String {
+        let args = [run, pointer, size];
+        let ret_type = &self.c_void_pointer_type();
+        self.c_call(builder, "weld_runst_realloc", &args, ret_type, name)
+    }
 
     /// Convinience wrapper for calling the `weld_run_free` intrinsic.
     pub unsafe fn call_weld_run_free(
@@ -693,13 +705,13 @@ void* weld_runst_set_result({run_handle} run, {voidp} p)
         (*self.ccontext()).prelude_code.add(format!("\
 void* weld_runst_malloc({run_handle} run, {u64} size)
 {{
-    // return ((WeldRuntimeContextRef)run)->result;
     return malloc(size);
 }}",
             run_handle=self.c_run_handle_type(),
             u64=self.c_u64_type(),
         ));
 /*
+    // FIXME:
     unsafe fn malloc(&mut self, size: i64) -> Ptr {
         if size == 0 {
             trace!("Alloc'd 0-size pointer (null)");
@@ -744,6 +756,44 @@ pub unsafe extern "C" fn weld_runst_malloc(run: WeldRuntimeContextRef, size: int
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_realloc as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add(format!("\
+extern void* realloc(void*, {u64});
+void* weld_runst_realloc({run_handle} run, void* ptr, {u64} size)
+{{
+    return realloc(ptr, size);
+}}",
+            run_handle=self.c_run_handle_type(),
+            u64=self.c_u64_type(),
+        ));
+/*
+    // FIXME:
+    unsafe fn realloc(&mut self, pointer: Ptr, size: i64) -> Ptr {
+        if pointer.is_null() {
+            return self.malloc(size);
+        }
+
+        let size = size as usize;
+        let old_layout = self.allocations.remove(&pointer).unwrap();
+        if self.allocated - old_layout.size() + size > self.memlimit {
+            self.errno = WeldRuntimeErrno::OutOfMemory;
+            panic!(
+                "Weld run ran out of memory (limit={}, attempted to allocate {}",
+                self.memlimit,
+                self.allocated - old_layout.size() + size
+            );
+        }
+
+        // Must pass *old* layout to realloc!
+        let mem = Allocator.realloc(pointer, old_layout, size);
+        let new_layout = Layout::from_size_align_unchecked(size, DEFAULT_ALIGN);
+
+        self.allocated -= old_layout.size();
+        self.allocated += new_layout.size();
+
+        self.allocations.insert(mem, new_layout);
+        mem
+    }
+*/
 
         let mut params = vec![self.run_handle_type(), int8p];
         let name = CString::new("weld_runst_free").unwrap();
