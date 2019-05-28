@@ -10,6 +10,10 @@ use std::ffi::{CStr, CString};
 use std::mem;
 use std::ptr;
 use std::sync::{Once, ONCE_INIT};
+use std::process::Command;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::PathBuf;
 
 use libc::c_char;
 
@@ -17,6 +21,7 @@ use self::time::PreciseTime;
 
 use crate::conf::ParsedConf;
 use crate::error::*;
+use crate::ast::Type;
 use crate::util::stats::CompilationStats;
 
 use self::llvm_sys::core::*;
@@ -42,6 +47,11 @@ pub struct CompiledModule {
     module: LLVMModuleRef,
     engine: LLVMExecutionEngineRef,
     run_function: I64Func,
+    // for C
+    pub filename: String,
+    pub encoded_params: String,
+    pub params: Type,
+    pub ret_ty: Type,
 }
 
 // The codegen interface requires that modules implement this trait. This allows supporting
@@ -119,14 +129,70 @@ pub unsafe fn init() {
     }
 }
 
+pub fn write_code(
+    code: String,
+) -> WeldResult<String> {
+    let path = &mut PathBuf::new();
+    path.push(".");
+    path.push(&format!("code-{}-{}", time::now().to_timespec().sec, "gen"));
+    path.set_extension("c");
+
+    let filename = path.to_str().unwrap().to_string();
+    info!("Writing code to {}", filename);
+
+    let mut options = OpenOptions::new();
+    let mut file = options.write(true).create_new(true).open(path)?;
+
+    file.write_all(code.as_bytes())?;
+
+    Ok(filename)
+}
+
 /// Compile a constructed module in the given LLVM context.
 pub unsafe fn compile(
+    code: String,
+    params: Type,
+    ret_ty: Type,
     context: LLVMContextRef,
     module: LLVMModuleRef,
     mappings: &[intrinsic::Mapping],
     conf: &ParsedConf,
     stats: &mut CompilationStats,
 ) -> WeldResult<CompiledModule> {
+
+    // Write code to a file
+    let filename = write_code(code)?;
+
+    // Compile it using CC
+    use crate::util::env::{get_cc,get_cflags,get_home};
+    let compiler = get_cc();
+    let cflags = get_cflags();
+    let home = get_home();
+    if home.is_empty() {
+        error!("WELD_HOME is not defined");
+    }
+    let shared_object = "libverun.so".to_string();
+
+    // Execute C compiler
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(&format!(concat!("{compiler} {cflags} {shared} -o {out} {file} ",
+                              "-L{home}/weld_rt/cpp ",
+                              "-Wl,-rpath,{home}/weld_rt/cpp ",
+                              "{lib}"),
+                      compiler=compiler,
+                      cflags=cflags,
+                      shared="-shared -fpic",
+                      out=shared_object,
+                      file=filename,
+                      home=home,
+                      lib="-lpthread -ldl"))
+        .output()
+        .expect("failed to execute process");
+    println!("status: \n{}", output.status);
+    println!("stdout: \n{}", String::from_utf8_lossy(&output.stdout));
+    println!("stderr: \n{}", String::from_utf8_lossy(&output.stderr));
+
     init();
 
     let start = PreciseTime::now();
@@ -163,6 +229,10 @@ pub unsafe fn compile(
         module,
         engine,
         run_function: run_func,
+        filename: shared_object,
+        encoded_params: "".to_string(),
+        params,
+        ret_ty,
     };
     Ok(result)
 }

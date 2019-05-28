@@ -66,6 +66,7 @@ use libc::{c_char, c_uint, c_ulonglong};
 use crate::conf::ParsedConf;
 use crate::error::*;
 use crate::sir::*;
+use crate::ast::Type::Struct;
 use crate::util::stats::CompilationStats;
 use crate::util::id::IdGenerator;
 
@@ -93,6 +94,17 @@ macro_rules! c_str {
         concat!($s, "\0").as_ptr() as *const i8
     };
 }
+
+static PRELUDE_CODE: &'static str = "\
+#include <assert.h>
+#include <math.h>
+
+// Disable several common warnin messages of ncc
+#pragma diag_suppress labeled_declaration
+//#pragma diag_suppress branch_past_initialization
+//#pragma diag_suppress exp_statement
+
+";
 
 mod builder;
 mod cmp;
@@ -166,7 +178,17 @@ pub fn compile(
     }
 
     let mappings = &codegen.intrinsics.mappings();
-    let module = unsafe { compile::compile(codegen.context, codegen.module, mappings, conf, stats)? };
+    let module = unsafe {
+        compile::compile(
+            codegen.gen_c_code(),
+            Struct(program.top_params.iter().map(|a| a.ty.clone()).collect()),
+            program.ret_ty.clone(),
+            codegen.context,
+            codegen.module,
+            mappings,
+            conf,
+            stats,
+        )? };
 
     nonfatal!(write_code(
         module.asm()?,
@@ -1174,7 +1196,7 @@ impl CGenerator {
     unsafe fn new(conf: ParsedConf) -> WeldResult<CGenerator> {
         let context = LLVMContextCreate();
         let module = LLVMModuleCreateWithNameInContext(c_str!("main"), context);
-        let ccontext_data = Box::new(CContext {
+        let mut ccontext_data = Box::new(CContext {
             basic_types: FnvHashMap::default(),
             simd_types: FnvHashMap::default(),
             i1_defined: false,
@@ -1185,6 +1207,7 @@ impl CGenerator {
             prelude_code: CodeBuilder::new(),
             body_code: CodeBuilder::new(),
         });
+        ccontext_data.prelude_code.add(PRELUDE_CODE);
         let ccontext: *mut CContext = Box::into_raw(ccontext_data);
 
         // These methods *must* be called before using any of the `CodeGenExt` extension methods.
