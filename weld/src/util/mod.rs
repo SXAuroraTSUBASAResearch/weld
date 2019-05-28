@@ -17,6 +17,7 @@ pub mod dump;
 pub mod stats;
 pub mod env;
 pub mod offload_ve;
+pub mod veoffload;
 pub mod id;
 
 /// Utility struct that can track and generate unique IDs and symbols for use in an expression.

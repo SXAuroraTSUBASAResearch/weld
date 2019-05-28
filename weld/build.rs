@@ -1,6 +1,16 @@
 use std::env;
 use std::process::Command;
 
+#[cfg(feature = "offload_ve")]
+fn offload_ve() -> bool {
+  true
+}
+
+#[cfg(not(feature = "offload_ve"))]
+fn offload_ve() -> bool {
+  false
+}
+
 /// Write the build ID into an environment variable.
 fn register_build_id() {
     // Set the build ID, which is either unknown or the git hash
@@ -54,4 +64,7 @@ fn main() {
 
     // Build and link external libs.
     build_llvmext(project_dir);
+    if offload_ve() {
+        println!("cargo:rustc-link-search=/opt/nec/ve/veos/lib64");
+    }
 }
