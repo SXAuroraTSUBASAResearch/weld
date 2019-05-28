@@ -16,8 +16,9 @@ use crate::conf::ParsedConf;
 use crate::error::*;
 use crate::runtime::WeldRuntimeErrno;
 use crate::sir::*;
-use crate::util::stats::CompilationStats;
+use crate::util::stats::{CompilationStats, RunStats};
 use crate::util::offload_ve::offload_ve;
+use crate::WeldError;
 
 use std::fmt;
 
@@ -58,7 +59,7 @@ pub struct WeldOutputArgs {
 
 /// A trait implemented by trait objects for running a Weld program.
 pub trait Runnable {
-    fn run(&self, arg: i64) -> i64;
+    fn run(&self, arg: i64, stats: &mut RunStats) -> Result<i64, WeldError>;
 }
 
 /// A compiled, runnable module.
@@ -70,8 +71,12 @@ impl CompiledModule {
     /// Run the compiled module.
     ///
     /// This calls the `run` function on the internal `Runnable`.
-    pub fn run(&self, arg: i64) -> i64 {
-        self.runnable.run(arg)
+    pub fn run(
+        &self,
+        arg: i64,
+        stats: &mut RunStats
+    ) -> Result<i64, WeldError> {
+        self.runnable.run(arg, stats)
     }
 }
 

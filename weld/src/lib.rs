@@ -184,7 +184,7 @@ mod tests;
 use crate::conf::ParsedConf;
 use crate::runtime::WeldRuntimeContext;
 use crate::util::dump::{write_code, DumpCodeFormat};
-use crate::util::stats::CompilationStats;
+use crate::util::stats::{CompilationStats, RunStats};
 
 // Error codes are exposed publicly.
 pub use crate::runtime::WeldRuntimeErrno;
@@ -850,8 +850,17 @@ impl WeldModule {
             let ptr = Box::into_raw(input) as i64;
 
             // Runs the Weld program.
-            let raw = self.llvm_module.run(ptr) as *const codegen::WeldOutputArgs;
+            let mut stats = RunStats::new();
+            let raw = self.llvm_module.run(ptr, &mut stats)?
+                as *const codegen::WeldOutputArgs;
             let result = (*raw).clone();
+
+            // Dump stat
+            use crate::util::env::get_weld_run_stats;
+            if get_weld_run_stats() {
+                println!("\n{}\n", stats.pretty_print());
+            }
+            debug!("\n{}\n", stats.pretty_print());
 
             // Free the boxed input.
             let _ = Box::from_raw(ptr as *mut codegen::WeldInputArgs);

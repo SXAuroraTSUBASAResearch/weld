@@ -21,8 +21,9 @@ use self::time::PreciseTime;
 
 use crate::conf::ParsedConf;
 use crate::error::*;
+use crate::WeldError;
 use crate::ast::Type;
-use crate::util::stats::CompilationStats;
+use crate::util::stats::{CompilationStats, RunStats};
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::execution_engine::*;
@@ -57,8 +58,12 @@ pub struct CompiledModule {
 // The codegen interface requires that modules implement this trait. This allows supporting
 // multiple backends via dynamic dispatch.
 impl Runnable for CompiledModule {
-    fn run(&self, arg: i64) -> i64 {
-        (self.run_function)(arg)
+    fn run(&self, arg: i64, stats: &mut RunStats) -> Result<i64, WeldError> {
+        let start = PreciseTime::now();
+        let result = (self.run_function)(arg);
+        let end = PreciseTime::now();
+        stats.run_times.push(("call run".to_string(), start.to(end)));
+        Ok(result)
     }
 }
 
