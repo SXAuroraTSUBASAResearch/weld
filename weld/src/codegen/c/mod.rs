@@ -34,8 +34,9 @@
 //! This module adds a number of "default" intrinsics, such as the Weld runtime functions (prefixed
 //! with `weld_strt_`), `memcpy`, and so forth.
 //!
-//! * The `jit` module manages compiling a constructed LLVM module into a runnable executable.
-//! Among other things, it manages LLVM optimization passes and module verification.
+//! * The `compile` module manages compiling a constructed C module.
+//!
+//! * The `run` module manages compiled module into a runnable executable.
 //!
 //! The `llvm_exts` modules uses `libllvmext` to provide LLVM functionality that `llvm_sys` (and by
 //! extension, the `llvm-c` API) does not provide. It is effectively a wrapper around a few
@@ -113,7 +114,7 @@ mod eq;
 mod hash;
 mod intrinsic;
 mod compile;
-//mod jit;
+mod run;
 mod llvm_exts;
 mod numeric;
 mod serde;
