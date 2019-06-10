@@ -293,7 +293,7 @@ impl Appender {
         let merge_value = self.c_get_param(1);
         let run_handle = self.c_get_run();
         c_code.add(format!(
-            "{u64} newSize = {app}->size * {num};",
+            "{u64} newSize = {app}->size + {num};",
             u64=self.c_u64_type(),
             app=appender,
             num=num_elements,
