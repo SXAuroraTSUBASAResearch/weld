@@ -680,6 +680,7 @@ pub trait CodeGenExt {
         arg_tys: &mut [LLVMTypeRef],
         c_arg_tys: &[String],
         name: T,
+        inline: bool,
     ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef, CodeBuilder) {
         self.define_function_with_visibility(
             ret_ty,
@@ -688,6 +689,7 @@ pub trait CodeGenExt {
             c_arg_tys,
             LLVMLinkage::LLVMPrivateLinkage,
             name,
+            inline,
         )
     }
 
@@ -703,13 +705,28 @@ pub trait CodeGenExt {
         c_arg_tys: &[String],
         visibility: LLVMLinkage,
         name: T,
+        inline: bool,
     ) -> (LLVMValueRef, LLVMBuilderRef, LLVMBasicBlockRef, CodeBuilder) {
         let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
         // for C
         let mut code = CodeBuilder::new();
         let args_line = self.c_define_args(&c_arg_tys);
         code.add(format!(
-            "{ret_ty} {fun}({args})",
+            "{st} {inl} {ret_ty} {fun}({args})",
+            st={
+                if visibility == LLVMLinkage::LLVMPrivateLinkage {
+                    "static"
+                } else {
+                    ""
+                }
+            },
+            inl={
+                if inline {
+                    "inline"
+                } else {
+                    ""
+                }
+            },
             ret_ty=c_ret_ty,
             fun=name.as_ref(),
             args=args_line,

@@ -82,7 +82,7 @@ impl GenEq for CGenerator {
         // Free the allocated string.
         LLVMDisposeMessage(c_prefix);
 
-        let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+        let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, true);
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);
         LLVMExtAddAttrsOnParameter(
@@ -300,6 +300,7 @@ impl GenEq for CGenerator {
             &c_arg_tys,
             LLVMLinkage::LLVMExternalLinkage,
             name,
+            true,
         );
 
         LLVMExtAddAttrsOnFunction(self.context, function, &[InlineHint]);

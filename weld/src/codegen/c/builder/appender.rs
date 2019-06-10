@@ -168,7 +168,7 @@ impl Appender {
 
             // Use C name.
             let name = format!("{}_new", self.name);
-            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), false);
 
             // for C
             c_code.add("{");
@@ -285,7 +285,7 @@ impl Appender {
         ];
         let ret_ty = LLVMVoidTypeInContext(self.context);
         let c_ret_ty = &self.c_void_type();
-        let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+        let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), true);
 
         // for C
         c_code.add("{");
@@ -498,7 +498,7 @@ impl Appender {
 
             // Use C name.
             let name = format!("{}_result", self.name);
-            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), false);
 
             // for C
             c_code.add("{");

@@ -492,7 +492,7 @@ impl Dict {
             let c_ret_ty = &self.c_i1_type();
             let name = format!("{}.resize", self.name);
 
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias], 0);
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NoCapture, NonNull], 1);
@@ -781,7 +781,7 @@ impl Dict {
             let c_ret_ty = &self.c_pointer_type(&self.slot_ty.c_slot_ty);
             let name = format!("{}.slot_for_key", self.name);
 
-            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NoCapture, ReadOnly], 0);
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NoCapture, ReadOnly], 3);
@@ -841,7 +841,7 @@ impl Dict {
             let c_ret_ty = &self.name.clone();
             let name = format!("{}.new", self.name);
 
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnReturn(self.context, function, &[NoAlias]);
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NoCapture, NonNull], 1);
@@ -952,7 +952,7 @@ impl Dict {
             let c_ret_ty = &self.c_pointer_type(&self.slot_ty.c_slot_ty);
 
             let name = format!("{}.upsert", self.name);
-            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, NoCapture, NonNull], 0);
             LLVMExtAddAttrsOnParameter(
@@ -1078,7 +1078,7 @@ impl Dict {
             let c_ret_ty = &self.c_pointer_type(&self.slot_ty.c_slot_ty);
 
             let name = format!("{}.optlookup", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 0);
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 1);
@@ -1140,7 +1140,7 @@ impl Dict {
             let c_ret_ty = &self.c_pointer_type(&self.slot_ty.c_slot_ty);
 
             let name = format!("{}.lookup", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 0);
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 1);
@@ -1213,7 +1213,7 @@ impl Dict {
             let c_ret_ty = &self.c_bool_type();
 
             let name = format!("{}.keyexists", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 0);
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 1);
@@ -1269,7 +1269,7 @@ impl Dict {
             let c_ret_ty = &kv_vector.name;
 
             let name = format!("{}.tovec", self.name);
-            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 0);
             LLVMExtAddAttrsOnParameter(self.context, function, &[NoAlias, ReadOnly], 1);
@@ -1710,7 +1710,7 @@ impl GroupingDict for Dict {
             let c_ret_ty = &self.c_void_type();
 
             let name = format!("{}.merge_grouped", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             let dict = LLVMGetParam(function, 0);
             let key = LLVMGetParam(function, 1);

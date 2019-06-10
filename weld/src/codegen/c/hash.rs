@@ -77,7 +77,7 @@ impl GenHash for CGenerator {
             // Free the allocated string.
             LLVMDisposeMessage(c_prefix);
 
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, true);
 
             // Always inline calls that do not generate loops.
             if !ty.has_pointer() {

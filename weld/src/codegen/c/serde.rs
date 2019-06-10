@@ -251,7 +251,7 @@ impl SerHelper for CGenerator {
             // Free the allocated string.
             LLVMDisposeMessage(c_prefix);
 
-            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             // TODO Set alwaysinline
 
@@ -616,7 +616,7 @@ impl DeHelper for CGenerator {
             // Free the allocated string.
             LLVMDisposeMessage(c_prefix);
 
-            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             // TODO Set alwaysinline
 

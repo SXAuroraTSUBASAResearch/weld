@@ -335,7 +335,7 @@ impl Vector {
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.new", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             let size = LLVMGetParam(function, 0);
             let elem_size = self.size_of(self.elem_ty);
@@ -385,7 +385,7 @@ impl Vector {
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.clone", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             let vector = LLVMGetParam(function, 0);
             let run = LLVMGetParam(function, 1);
@@ -449,7 +449,7 @@ impl Vector {
             let c_ret_ty = &self.c_pointer_type(&self.c_elem_ty);
 
             let name = format!("{}_at", self.name);
-            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), true);
 
             // for C
             c_code.add("{");
@@ -532,7 +532,7 @@ impl Vector {
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.slice", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             let vector = LLVMGetParam(function, 0);
             let index = LLVMGetParam(function, 1);
@@ -585,7 +585,7 @@ impl Vector {
             let c_ret_ty = &self.c_pointer_type(&self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH));
 
             let name = format!("{}.vat", self.name);
-            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, _, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, true);
 
             LLVMExtAddAttrsOnFunction(self.context, function, &[AlwaysInline]);
 
@@ -626,7 +626,7 @@ impl Vector {
 
             // Use C name.
             let name = format!("{}_size", self.name);
-            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), true);
 
             // for C
             c_code.add("{");
@@ -703,7 +703,7 @@ impl Vector {
             let c_ret_ty = &self.name.clone();
 
             let name = format!("{}.extend", self.name);
-            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name);
+            let (function, builder, entry_block, _) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name, false);
 
             let realloc_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
             let finish_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));

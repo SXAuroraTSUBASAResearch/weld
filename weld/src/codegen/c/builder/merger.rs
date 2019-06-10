@@ -119,7 +119,7 @@ impl Merger {
 
             // Use C name.
             let name = format!("{}_new", self.name);
-            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), false);
 
             // for C
             let c_identity = self.c_binop_identity(self.op, self.scalar_kind)?;
@@ -205,7 +205,7 @@ impl Merger {
         let vectorized = gep_index != SCALAR_INDEX;
         let ret_ty = LLVMVoidTypeInContext(self.context);
         let c_ret_ty = &self.c_void_type();
-        let (function, fn_builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, arguments, c_arguments, name.clone());
+        let (function, fn_builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, arguments, c_arguments, name.clone(), true);
 
         // for C
         // Load the scalar element, apply the binary operator, and then store it back.
@@ -350,7 +350,7 @@ impl Merger {
 
             // Use C name.
             let name = format!("{}_result", self.name);
-            let (function, fn_builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone());
+            let (function, fn_builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), false);
 
             // for C
             // Load the scalar element, apply the binary operator, and then store it back.
