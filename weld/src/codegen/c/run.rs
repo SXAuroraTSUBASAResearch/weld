@@ -40,6 +40,8 @@ impl Runnable for CompiledModule {
         unsafe {
             let start = PreciseTime::now();
             let node = get_ve_node_number();
+            // Instanciate VE proc.
+            // FIXME: call this only once.
             let proc_handle = veo_proc_create(node);
             let end = PreciseTime::now();
             stats.run_times.push(("veo_proc_create".to_string(), start.to(end)));
@@ -53,6 +55,7 @@ impl Runnable for CompiledModule {
             if ctx.is_null() {
                 return weld_err!("cannot create veo context");
             }
+            // Load generated shared-object by Weld on VE.
             let start = PreciseTime::now();
             let libname = format!("./{}", self.filename);
             let libcname = CString::new(libname.clone()).unwrap();
@@ -63,30 +66,7 @@ impl Runnable for CompiledModule {
             if handle == 0 {
                 return weld_err!("cannot load library {}", libname);
             }
-/*
-            // call weld_runtime_init first.
-            let start = PreciseTime::now();
-            let funname = "weld_runtime_init";
-            let funcname = CString::new(funname).unwrap();
-            let funcname_raw = funcname.into_raw() as *const c_char;
-            let fun = veo_get_sym(proc_handle, handle, funcname_raw);
-            if fun == 0 {
-                return weld_err!("cannot find function {}", funname);
-            }
-            let args = veo_args_alloc();
-            let id = veo_call_async(ctx, fun, args);
-            // println!("running id {}", id);
-
-            let mut retval_ve_ptr: uint64_t = 0;
-            let wait = veo_call_wait_result(ctx, id, &mut retval_ve_ptr);
-            let end = PreciseTime::now();
-            stats.run_times.push(("call weld_runtime_init".to_string(), start.to(end)));
-            match wait {
-                VeoCommandState::VeoCommandOk => {}
-                _ => { return weld_err!("calling {} failed", funname); }
-            };
-*/
-            // call run function.
+            // Retreieve entry function address on VE.
             let args = veo_args_alloc();
             let start = PreciseTime::now();
             let funname = "run";
@@ -101,31 +81,50 @@ impl Runnable for CompiledModule {
             // println!("params is {:?}", self.params);
             // println!("ret_ty is {:?}", self.ret_ty);
             // println!("encoded_params is {}", self.encoded_params);
+
+            // Prepare arguments for entry function.
             let start = PreciseTime::now();
-            use crate::codegen::WeldInputArgs;
-            let input: Box<WeldInputArgs> =
-                Box::from_raw(arg as *mut WeldInputArgs);
-            let end = PreciseTime::now();
-            stats.run_times.push(("from_raw".to_string(), start.to(end)));
             //      WeldInputArgs
             //   0: i64      input (refer a struct of parameters)
             //   8: i32      nworkers
             //  16: i64      memlimit
-            let addr_input = &input.input as *const i64 as u64;
+            //  24: i64      run
+            use crate::codegen::WeldInputArgs;
+            let input_ptr = arg as *const WeldInputArgs;
+            // let data_ptr = (*input_ptr).input as u64;
+            let data_ptr = &(*input_ptr).input as *const i64 as u64;
+            let nworkers = (*input_ptr).nworkers;
+            let mem_limit = (*input_ptr).mem_limit;
+            let mut run = (*input_ptr).run;
+            use crate::runtime::WeldRuntimeContext;
+            let context: *mut WeldRuntimeContext;
+            if run == 0 {
+                // Call weld_runst_init to instanciate WeldRuntimeContext.
+                use crate::runtime::ffi::weld_runst_init;
+                context = weld_runst_init(nworkers, mem_limit);
+                run = context as i64;
+            } else {
+                // Use existing WeldRuntimeContext.
+                // (Usually, it is created by caller)
+                context = run as *mut WeldRuntimeContext;
+            }
+            let end = PreciseTime::now();
+            stats.run_times.push(("from_raw".to_string(), start.to(end)));
 
-            // Allocate VE memory for:
-            //
             // First, calculate the size of memory needed to be allocated by
-            // adding WeldInputArgs and the actual size of data.
+            // the size of WeldInputArgs and the given data.
             let start = PreciseTime::now();
-            let data_size = self.calc_size(&self.params, addr_input)?;
+            use std::mem::size_of;
+            let input_size = size_of::<WeldInputArgs>() as u64;
+            let data_size = self.calc_size(&self.params, data_ptr)?;
             let end = PreciseTime::now();
             stats.run_times.push(("calc_size".to_string(), start.to(end)));
+
             // The calc_size returns the size of whole data including a pointer
             // the the struct of parameters, so reduce 8.
-            let sz = 24 + data_size - 8;
+            let sz = input_size + data_size - 8;
 
-            // Allocate VE memory and transfer first vec<i32> into it
+            // Allocate VE memory.
             let mut addr_ve: uint64_t = 0;
             let start = PreciseTime::now();
             let err = veo_alloc_mem(proc_handle, &mut addr_ve, sz);
@@ -139,20 +138,28 @@ impl Runnable for CompiledModule {
             // prepare arguments and whole input data
             let start = PreciseTime::now();
             let input_generated = WeldInputArgs {
-                input: (addr_ve + 24) as i64,
-                nworkers: input.nworkers,
-                mem_limit: input.mem_limit,
+                input: (addr_ve + input_size) as i64,
+                nworkers,
+                mem_limit,
                 run: 0,
             };
-            // println!("nworkers {}", input.nworkers);
-            // println!("memlimit {}", input.mem_limit);
             let mut buffer = Vec::<u8>::with_capacity(sz as usize);
             buffer.set_len(sz as usize);
             ptr::copy_nonoverlapping(&input_generated as *const WeldInputArgs
-                                     as *const u8, &mut buffer[0], 24);
+                                     as *const u8, &mut buffer[0],
+                                     input_size as usize);
             let addr_vh = &buffer[0] as *const u8 as u64;
-            self.convert_top_params(&self.params, addr_input, addr_vh + 24,
-                addr_ve + 24)?;
+            // let input_p = addr_vh as *const WeldInputArgs;
+            // println!("nworkers {}", (*input_p).nworkers);
+            // println!("mem_limit {}", (*input_p).mem_limit);
+            // println!("run {}", (*input_p).run);
+
+            self.convert_top_params(
+                &self.params,
+                data_ptr,
+                addr_vh + input_size,
+                addr_ve + input_size,
+            )?;
             let end = PreciseTime::now();
             stats.run_times.push(("convert_top_params".to_string(), start.to(end)));
 
@@ -188,30 +195,39 @@ impl Runnable for CompiledModule {
                 _ => WeldRuntimeErrno::Unknown,
             };
 
-            // Return value on VE memory:
+            let start = PreciseTime::now();
+
+            // Allocate and read WeldOutputArgs from VE memory.
             //      WeldOutputArgs
             //   0: intptr_t output
-            //   8: i64      run_id
+            //   8: i64      run
             //  16: i64      errno
             use crate::codegen::WeldOutputArgs;
-            let start = PreciseTime::now();
-            let mut ret = WeldOutputArgs {
-                output: 0,
-                run: 0,
-                errno: errno,
-            };
+            use crate::runtime::ffi::weld_runst_malloc;
+            let output_size = size_of::<WeldOutputArgs>() as u64;
+            let ret = weld_runst_malloc(context, output_size as i64)
+                as *mut WeldOutputArgs;
             if errno != WeldRuntimeErrno::Unknown {
                 let err = veo_read_mem(proc_handle,
-                                       &mut ret as *mut WeldOutputArgs
-                                       as *mut c_void, retval_ve_ptr, 24);
+                                       ret as *mut c_void,
+                                       retval_ve_ptr,
+                                       output_size,
+                );
                 if err != 0 {
                     return weld_err!("cannot read veo memory");
                 }
+                // FIXME: need to handle VE's run correctly for latter calls.
+                // Overwrite `run` using HOST's run.
+                (*ret).run = run;
+            } else {
+                (*ret).output = 0;
+                (*ret).run = run;
+                (*ret).errno = errno;
             }
             // Copy VE's output to VH if calculation was succeeded
-            if ret.errno == WeldRuntimeErrno::Success {
-                self.convert_results(&self.ret_ty, ret.output as u64,
-                                     &mut ret.output as *mut i64 as u64,
+            if (*ret).errno == WeldRuntimeErrno::Success {
+                self.convert_results(&self.ret_ty, (*ret).output as u64,
+                                     &mut (*ret).output as *mut i64 as u64,
                                      proc_handle)?;
             }
             let end = PreciseTime::now();
@@ -228,9 +244,7 @@ impl Runnable for CompiledModule {
             }
             let end = PreciseTime::now();
             stats.run_times.push(("free and destroy".to_string(), start.to(end)));
-            let vn = Box::new(ret);
-            Ok(Box::into_raw(vn) as i64)
-            // (self.run_function)(arg)
+            Ok(ret as i64)
         }
     }
 }
@@ -470,7 +484,9 @@ impl CompiledModule {
                 Ok(())
             }
             _ => {
-                weld_err!("Invalid type {} for the type of return type", ty)
+                self.convert_result(&*ty, ve_addr, vh_addr, proc_handle)?;
+                Ok(())
+                // weld_err!("Invalid type {} for the type of return type", ty)
             }
         }
     }
