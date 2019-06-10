@@ -238,6 +238,10 @@ impl Runnable for CompiledModule {
             if err != 0 {
                 return weld_err!("cannot free veo memory");
             }
+            let err = veo_context_close(ctx);
+            if err != 0 {
+                return weld_err!("cannot close veo context");
+            }
             let err = veo_proc_destroy(proc_handle);
             if err != 0 {
                 return weld_err!("cannot destrocy veo proc");

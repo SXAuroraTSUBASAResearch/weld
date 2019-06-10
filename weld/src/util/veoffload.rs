@@ -42,6 +42,7 @@ extern "C" {
                        FunName: *const c_char)
                        -> SymHandle;
     pub fn veo_context_open(PH: VeoProcHandleRef) -> VeoThrContextRef;
+    pub fn veo_context_close(Ctx: VeoThrContextRef) -> c_int;
     pub fn veo_args_alloc() -> VeoArgsRef;
     pub fn veo_args_clear(Args: VeoArgsRef);
     pub fn veo_args_free(Args: VeoArgsRef);
