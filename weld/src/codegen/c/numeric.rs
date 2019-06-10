@@ -638,9 +638,18 @@ impl NumericExpressionGen for CGenerator {
     ) -> WeldResult<()> {
         use crate::sir::StatementKind::Cast;
         let output = &statement.output.clone().unwrap();
+        let c_output_pointer = ctx.c_get_value(output)?;
         let output_pointer = ctx.get_value(output)?;
         let output_type = ctx.sir_function.symbol_type(output)?;
         if let Cast(ref child, _) = statement.kind {
+            // for C
+            ctx.body.add(format!(
+                "{} = ({}){};",
+                c_output_pointer,
+                &self.c_type(output_type)?,
+                ctx.c_get_value(child)?,
+            ));
+            // for LLVM
             let child_type = ctx.sir_function.symbol_type(child)?;
             let child_value = self.load(ctx.builder, ctx.get_value(child)?)?;
             let result = gen_cast(

@@ -288,8 +288,21 @@ impl BuilderExpressionGen for CGenerator {
             }
             Merger(_, _) => {
                 // for C
-                ctx.body.add(
-                    "#error NewBuilder for Merger is not implemented yet");
+                // The argument is either the provided one or the identity.
+                let argument = if let Some(arg) = nb.arg {
+                    ctx.c_get_value(arg)?
+                } else {
+                    let methods = self.mergers.get_mut(nb.kind).unwrap();
+                    methods.c_binop_identity(methods.op, methods.scalar_kind)?
+                };
+                ctx.body.add(format!(
+                    "{} = {};",
+                    c_output_pointer,
+                    {
+                        let methods = self.mergers.get_mut(nb.kind).unwrap();
+                        methods.c_gen_new(ctx.builder, &argument)?
+                    },
+                ));
 
                 // for LLVM
                 // The argument is either the provided one or the identity.
@@ -470,10 +483,15 @@ impl BuilderExpressionGen for CGenerator {
                 )?;
                 Ok(())
             }
-            Merger(_, _) => {
+            Merger(ref ty, _) => {
                 // for C
-                ctx.body.add(
-                    "#error Merge for Merger is not implemented yet");
+                let c_merge_value = ctx.c_get_value(m.value)?;
+                let methods = self.mergers.get_mut(m.kind).unwrap();
+                let merge = methods.c_gen_merge(ctx.builder, &c_builder_pointer, &c_merge_value, ty)?;
+                ctx.body.add(format!(
+                    "{};",
+                    merge,
+                ));
 
                 // for LLVM
                 let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
@@ -570,8 +588,15 @@ impl BuilderExpressionGen for CGenerator {
             }
             Merger(_, _) => {
                 // for C
-                ctx.body.add(
-                    "#error Res for Merger is not implemented yet");
+                let result = {
+                    let methods = self.mergers.get_mut(m.kind).unwrap();
+                    methods.c_gen_result(ctx.builder, &c_builder_pointer)?
+                };
+                ctx.body.add(format!(
+                    "{} = {};",
+                    c_output_pointer,
+                    result,
+                ));
 
                 // for LLVM
                 let result = {
@@ -709,10 +734,12 @@ impl BuilderExpressionGen for CGenerator {
                         } else {
                             unreachable!()
                         };
-                        let llvm_elem_type = self.llvm_type(elem_type)?;
+                        let name = format!("merger{}", self.merger_index);
+                        self.merger_index += 1;
                         let c_elem_type = &self.c_type(elem_type)?.to_string();
+                        let llvm_elem_type = self.llvm_type(elem_type)?;
                         let merger = merger::Merger::define(
-                            "merger",
+                            name,
                             *binop,
                             llvm_elem_type,
                             c_elem_type,

@@ -99,6 +99,8 @@ macro_rules! c_str {
 static PRELUDE_CODE: &'static str = "\
 #include <assert.h>
 #include <math.h>
+#include <float.h>
+#include <limits.h>
 
 // Disable several common warnin messages of ncc
 #pragma diag_suppress labeled_declaration
@@ -531,6 +533,8 @@ pub struct CGenerator {
     ///
     /// The key maps the merger type to the merger's type reference and methods on it.
     mergers: FnvHashMap<BuilderKind, merger::Merger>,
+    /// Counter for unique merger names.
+    merger_index: u32,
     /// A map tracking generated appenders.
     ///
     /// The key maps the appender type to the appender's type reference and methods on it.
@@ -803,6 +807,106 @@ pub trait CodeGenExt {
             _ => unreachable!(),
         }
     }
+    unsafe fn c_binop_identity(&self, op: BinOpKind, kind: ScalarKind) -> WeldResult<String> {
+        use crate::ast::BinOpKind::*;
+        use crate::ast::ScalarKind::*;
+        match kind {
+            Bool => {
+                match op {
+                    Add | Max => Ok("0".to_string()),
+                    Multiply | Min => Ok("1".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            I8 => {
+                match op {
+                    Add => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Max => Ok("SCHAR_MIN".to_string()),
+                    Min => Ok("SCHAR_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            U8 => {
+                match op {
+                    Add | Max => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Min => Ok("UCHAR_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            I16 => {
+                match op {
+                    Add => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Max => Ok("SHRT_MIN".to_string()),
+                    Min => Ok("SHRT_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            U16 => {
+                match op {
+                    Add | Max => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Min => Ok("USHRT_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            I32 => {
+                match op {
+                    Add => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Max => Ok("INT_MIN".to_string()),
+                    Min => Ok("INT_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            U32 => {
+                match op {
+                    Add | Max => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Min => Ok("UINT_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            I64 => {
+                match op {
+                    Add => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Max => Ok("LONG_MIN".to_string()),
+                    Min => Ok("LONG_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            U64 => {
+                match op {
+                    Add | Max => Ok("0".to_string()),
+                    Multiply => Ok("1".to_string()),
+                    Min => Ok("ULONG_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            F32 => {
+                match op {
+                    Add => Ok("0.0".to_string()),
+                    Multiply => Ok("1.0".to_string()),
+                    Max => Ok("FLT_MIN".to_string()),
+                    Min => Ok("FLT_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+            F64 => {
+                match op {
+                    Add => Ok("0.0".to_string()),
+                    Multiply => Ok("1.0".to_string()),
+                    Max => Ok("DBL_MIN".to_string()),
+                    Min => Ok("DBL_MAX".to_string()),
+                    _ => unreachable!(),
+                }
+            }
+        }
+    }
+
 
     /// Returns the constant size of a type.
     unsafe fn size_of(&self, ty: LLVMTypeRef) -> LLVMValueRef {
@@ -1237,6 +1341,7 @@ impl CGenerator {
             vectors: FnvHashMap::default(),
             vector_index: 0,
             mergers: FnvHashMap::default(),
+            merger_index: 0,
             appenders: FnvHashMap::default(),
             appender_index: 0,
             dictionaries: FnvHashMap::default(),
@@ -1843,10 +1948,7 @@ impl CGenerator {
                 Ok(())
             }
             Cast(_, _) => {
-                // for C
-                context.body.add("#error Cast is not implemented yet");
-
-                // for LLVM
+                // for C and LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_cast(context, statement)
             }

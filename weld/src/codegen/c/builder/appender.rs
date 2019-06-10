@@ -293,7 +293,13 @@ impl Appender {
         let merge_value = self.c_get_param(1);
         let run_handle = self.c_get_run();
         c_code.add(format!(
-            "if ({app}->size + 1 > {app}->capacity) {{",
+            "{u64} newSize = {app}->size * {num};",
+            u64=self.c_u64_type(),
+            app=appender,
+            num=num_elements,
+        ));
+        c_code.add(format!(
+            "if (newSize > {app}->capacity) {{",
             app=appender,
         ));
         c_code.add(format!(
@@ -321,7 +327,7 @@ impl Appender {
             val=merge_value,
         ));
         c_code.add(format!(
-            "++{app}->size;",
+            "{app}->size = newSize;",
             app=appender,
         ));
         c_code.add("}");
