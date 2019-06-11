@@ -124,9 +124,10 @@ impl Merger {
             // for C
             let c_identity = self.c_binop_identity(self.op, self.scalar_kind)?;
             c_code.add("{");
-            // let elem_size = self.size_of(self.elem_ty);
             c_code.add(format!("{} ret;", self.name));
-            c_code.add(format!("ret.data = {};", c_identity));
+            // Initialize only scalar value using first parameter.
+            c_code.add(format!("ret.data = {};", self.c_get_param(0)));
+            // Initialize vector data using identity.
             c_code.add(format!("\
                 for (int i = 0; i < {}; ++i) {{
                     ret.vdata[i] = {};
