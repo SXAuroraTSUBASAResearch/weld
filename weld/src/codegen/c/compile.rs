@@ -44,7 +44,6 @@ pub struct CompiledModule {
     context: LLVMContextRef,
     module: LLVMModuleRef,
     engine: LLVMExecutionEngineRef,
-    run_function: I64Func,
     // for C
     pub filename: String,
     pub encoded_params: String,
@@ -210,7 +209,6 @@ pub unsafe fn compile(
         .push(("Create Exec Engine".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
-    let run_func = find_function(engine, &conf.llvm.run_func_name)?;
     let end = PreciseTime::now();
     stats
         .llvm_times
@@ -220,7 +218,6 @@ pub unsafe fn compile(
         context,
         module,
         engine,
-        run_function: run_func,
         filename: shared_object,
         encoded_params: "".to_string(),
         params,
@@ -468,15 +465,4 @@ unsafe fn create_exec_engine(
         }
         Ok(engine)
     }
-}
-
-/// Get a pointer to a named function in an execution engine.
-unsafe fn find_function(engine: LLVMExecutionEngineRef, name: &str) -> WeldResult<I64Func> {
-    let c_name = CString::new(name).unwrap();
-    let func_addr = LLVMGetFunctionAddress(engine, c_name.as_ptr());
-    if func_addr == 0 {
-        return compile_err!("No function named {} in module", name);
-    }
-    let function: I64Func = mem::transmute(func_addr);
-    Ok(function)
 }
