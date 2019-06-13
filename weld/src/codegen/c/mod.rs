@@ -1426,138 +1426,44 @@ impl CGenerator {
 
     /// Generates the entry point to the Weld program.
     ///
-    /// The entry function takes an `i64` and returns an `i64`. Both represent pointers that
-    /// point to a `WeldInputArgs` and `WeldOutputArgs` respectively.
+    /// The entry function takes an `i64` and returns an `i64`.
+    /// Both represent pointers that point to a `WeldInputArgs` and
+    /// `WeldOutputArgs` respectively.
     unsafe fn gen_entry(&mut self, program: &SirProgram) -> WeldResult<()> {
         use crate::ast::Type::Struct;
 
         // Declare types.
-        // for C
         let c_input_type = WeldInputArgs::c_type(self.ccontext);
         let c_output_type = WeldOutputArgs::c_type(self.ccontext);
-        // for LLVM
-        let input_type = WeldInputArgs::llvm_type(self.context);
-        let output_type = WeldOutputArgs::llvm_type(self.context);
 
         // Declare run function.
-        // for C
-        (*self.ccontext()).body_code.add(format!("i64 {}(i64 args)\n{{", self.conf.llvm.run_func_name));
-        // for LLVM
-        let name = CString::new(self.conf.llvm.run_func_name.as_bytes()).unwrap();
-        let func_ty = LLVMFunctionType(self.i64_type(), [self.i64_type()].as_mut_ptr(), 1, 0);
-        let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
-
-        // Add the default attributes to all functions.
-        llvm_exts::LLVMExtAddDefaultAttrs(self.context(), function);
-
-        // This function is the global entry point into the program, so we must give it externally
-        // visible linkage.
-        LLVMSetLinkage(function, LLVMLinkage::LLVMExternalLinkage);
-
-        let builder = LLVMCreateBuilderInContext(self.context);
-        let entry_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
-        let init_run_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
-        let get_arg_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!(""));
-
-        // Generate codes for entry block
-        // for C
-        (*self.ccontext()).body_code.add(format!("{input}* input = ({input}*)args;", input=c_input_type));
-        // for LLVM
-        LLVMPositionBuilderAtEnd(builder, entry_block);
-        let argument = LLVMGetParam(function, 0);
-        let pointer = LLVMBuildIntToPtr(
-            builder,
-            argument,
-            LLVMPointerType(input_type, 0),
-            c_str!(""),
-        );
-
-        // Check whether we already have an existing run.
-        // for C
-        (*self.ccontext()).body_code.add(format!("{handle} run = ({handle})input->run;", handle=self.c_run_handle_type()));
-        (*self.ccontext()).body_code.add("if (run == 0) {");
-        
-        // for LLVM
-        let run_pointer =
-            LLVMBuildStructGEP(builder, pointer, WeldInputArgs::run_index(), c_str!(""));
-        let run_pointer = self.load(builder, run_pointer)?;
-        let run_arg = LLVMBuildIntToPtr(builder, run_pointer, self.run_handle_type(), c_str!(""));
-        let null = LLVMConstNull(self.run_handle_type());
-        let null_check = LLVMBuildICmp(
-            builder,
-            llvm_sys::LLVMIntPredicate::LLVMIntEQ,
-            run_arg,
-            null,
-            c_str!(""),
-        );
-        LLVMBuildCondBr(builder, null_check, init_run_block, get_arg_block);
-
-        // Generate codes for init_run block.
-        // for C
         (*self.ccontext()).body_code.add(format!(
-            "{} = {};",
-            "run",
-            self.intrinsics.c_call_weld_run_init(
+            "i64 {}(i64 args)\n{{",
+            self.conf.llvm.run_func_name,
+        ));
+
+        // Generate codes to call initialize function at once
+        (*self.ccontext()).body_code.add(format!("\
+            {input}* input = ({input}*)args;
+            {handle} run = ({handle})input->run;
+            if (run == 0) {{
+                run = {call_init};
+            }}",
+            input=c_input_type,
+            handle=self.c_run_handle_type(),
+            call_init=self.intrinsics.c_call_weld_run_init(
                 "input->nworkers",
                 "input->memlimit",
             ),
         ));
-        (*self.ccontext()).body_code.add("}");
-        // for LLVM
-        LLVMPositionBuilderAtEnd(builder, init_run_block);
-        let nworkers_pointer = LLVMBuildStructGEP(
-            builder,
-            pointer,
-            WeldInputArgs::nworkers_index(),
-            c_str!("nworkers"),
-        );
-        let nworkers = self.load(builder, nworkers_pointer)?;
-        let memlimit_pointer = LLVMBuildStructGEP(
-            builder,
-            pointer,
-            WeldInputArgs::memlimit_index(),
-            c_str!("memlimit"),
-        );
-        let memlimit = self.load(builder, memlimit_pointer)?;
-        let run_new = self
-            .intrinsics
-            .call_weld_run_init(builder, nworkers, memlimit, None);
-        LLVMBuildBr(builder, get_arg_block);
 
         // Generate codes for get_arg block.
-        // for C
-        let arg_ty = &Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
-        (*self.ccontext()).body_code.add(format!("{ty}* arg = ({ty}*)(input->input);", ty=self.c_type(arg_ty)?));
-
-        // for LLVM
-        LLVMPositionBuilderAtEnd(builder, get_arg_block);
-        let run = LLVMBuildPhi(builder, self.run_handle_type(), c_str!(""));
-        let mut blocks = [entry_block, init_run_block];
-        let mut values = [run_arg, run_new];
-        LLVMAddIncoming(
-            run,
-            values.as_mut_ptr(),
-            blocks.as_mut_ptr(),
-            blocks.len() as u32,
-        );
-
-        let arg_pointer = LLVMBuildStructGEP(
-            builder,
-            pointer,
-            WeldInputArgs::input_index(),
-            c_str!("argptr"),
-        );
-        // Still a pointer, but now as an integer.
-        let arg_pointer = self.load(builder, arg_pointer)?;
-        // The first SIR function is the entry point.
-        let arg_ty = &Struct(program.top_params.iter().map(|p| p.ty.clone()).collect());
-        let llvm_arg_ty = self.llvm_type(arg_ty)?;
-        let arg_struct_pointer = LLVMBuildIntToPtr(
-            builder,
-            arg_pointer,
-            LLVMPointerType(llvm_arg_ty, 0),
-            c_str!("arg"),
-        );
+        let arg_ty = &Struct(program.top_params.iter().
+            map(|p| p.ty.clone()).collect());
+        (*self.ccontext()).body_code.add(format!(
+            "{ty}* arg = ({ty}*)(input->input);",
+            ty=self.c_type(arg_ty)?,
+        ));
 
         // Function arguments are sorted by symbol name - arrange the inputs in the proper order.
         let mut params: Vec<(&Symbol, u32)> = program
@@ -1570,26 +1476,14 @@ impl CGenerator {
         params.sort();
 
         // Prepare entry_function's arguments list.
-        // for C
         let mut c_func_args = vec![];
         for (_, i) in params.iter() {
             c_func_args.push(format!("arg->f{}", i));
         }
-        // for LLVM
-        let mut func_args = vec![];
-        for (_, i) in params.iter() {
-            let pointer = LLVMBuildStructGEP(builder, arg_struct_pointer, *i, c_str!("param"));
-            let value = self.load(builder, pointer)?;
-            func_args.push(value);
-        }
         // Push the run handle.
-        // for C
         c_func_args.push("run".to_string());
-        // for LLVM
-        func_args.push(run);
 
         // Run the Weld program.
-        // for C
         let args_line = self.c_call_args(&c_func_args);
         let ret_ty = self.c_type(&program.funcs[0].return_type)?;
         let res = (*self.ccontext()).var_ids.next();
@@ -1602,110 +1496,26 @@ impl CGenerator {
                 &args_line,
             ),
         ));
-        // for LLVM
-        let entry_function = self.functions[&program.funcs[0].id];
-        let inst = LLVMBuildCall(
-            builder,
-            entry_function,
-            func_args.as_mut_ptr(),
-            func_args.len() as u32,
-            c_str!(""),
-        );
-        LLVMSetInstructionCallConv(inst, SIR_FUNC_CALL_CONV);
-
-        // Get the results, errno, and run.
-        // for C
-        let res = (*self.ccontext()).var_ids.next();
-        (*self.ccontext()).body_code.add(format!(
-            "void* {} = {};",
-            res,
-            self.intrinsics.c_call_weld_run_get_result("run"),
-        ));
-        let c_result = (*self.ccontext()).var_ids.next();
-        (*self.ccontext()).body_code.add(format!(
-            "{i64} {result} = ({i64}){res};",
-            i64=self.c_i64_type(), result=c_result, res=res));
-        let c_errno = (*self.ccontext()).var_ids.next();
-        (*self.ccontext()).body_code.add(format!(
-            "{} {} = {};",
-            self.c_i64_type(),
-            c_errno,
-            self.intrinsics.c_call_weld_run_get_errno("run"),
-        ));
-        let c_run_int = (*self.ccontext()).var_ids.next();
-        (*self.ccontext()).body_code.add(format!(
-            "{i64} {run_int} = ({i64})run;",
-            i64=self.c_i64_type(), run_int=c_run_int));
-        // for LLVM
-        let result = self.intrinsics.call_weld_run_get_result(builder, run, None);
-        let result = LLVMBuildPtrToInt(builder, result, self.i64_type(), c_str!("result"));
-        let errno = self
-            .intrinsics
-            .call_weld_run_get_errno(builder, run, Some(c_str!("errno")));
-        let run_int = LLVMBuildPtrToInt(builder, run, self.i64_type(), c_str!("run"));
 
         // Generate Output
-        // for C
         let return_size = self.c_size_of(c_output_type);
-        let return_pointer = (*self.ccontext()).var_ids.next();
-        (*self.ccontext()).body_code.add(format!(
-            "{} {} = {};",
-            "void*",
-            return_pointer,
-            self.intrinsics.c_call_weld_run_malloc("run", &return_size),
+        (*self.ccontext()).body_code.add(format!("\
+            {out_ty}* output = ({out_ty}*){malloc};
+            output->output = ({i64}){get_result};
+            output->run = ({i64})run;
+            output->errno = {get_errno};",
+            i64=self.c_i64_type(),
+            out_ty=c_output_type,
+            malloc=self.intrinsics.c_call_weld_run_malloc("run", &return_size),
+            get_result=self.intrinsics.c_call_weld_run_get_result("run"),
+            get_errno=self.intrinsics.c_call_weld_run_get_errno("run"),
         ));
-        (*self.ccontext()).body_code.add(format!("{output}* output = ({output}*){ptr};", output=c_output_type, ptr=return_pointer));
-        (*self.ccontext()).body_code.add(format!(
-            "output->output = {};", c_result));
-        (*self.ccontext()).body_code.add(format!(
-            "output->run = {};", c_run_int));
-        (*self.ccontext()).body_code.add(format!(
-            "output->errno = {};", c_errno));
-        // for LLVM
-        let mut output = LLVMGetUndef(output_type);
-        output = LLVMBuildInsertValue(
-            builder,
-            output,
-            result,
-            WeldOutputArgs::output_index(),
-            c_str!(""),
-        );
-        output = LLVMBuildInsertValue(
-            builder,
-            output,
-            run_int,
-            WeldOutputArgs::run_index(),
-            c_str!(""),
-        );
-        output = LLVMBuildInsertValue(
-            builder,
-            output,
-            errno,
-            WeldOutputArgs::errno_index(),
-            c_str!(""),
-        );
-
-        let return_size = self.size_of(output_type);
-        let return_pointer = self
-            .intrinsics
-            .call_weld_run_malloc(builder, run, return_size, None);
-        let return_pointer = LLVMBuildBitCast(
-            builder,
-            return_pointer,
-            LLVMPointerType(output_type, 0),
-            c_str!(""),
-        );
 
         // Generate Return instruction.
-        // for C
         (*self.ccontext()).body_code.add(format!(
-            "return ({})output;\n}}", self.c_i64_type()));
-        // for LLVM
-        LLVMBuildStore(builder, output, return_pointer);
-        let return_value = LLVMBuildPtrToInt(builder, return_pointer, self.i64_type(), c_str!(""));
-        LLVMBuildRet(builder, return_value);
-
-        LLVMDisposeBuilder(builder);
+            "return ({})output;\n}}",
+            self.c_i64_type(),
+        ));
         Ok(())
     }
 
