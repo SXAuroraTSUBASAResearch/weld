@@ -234,7 +234,10 @@ typedef struct {{
     {i64} run;
 }} input_args_t;
 
-", i64=c_i64_type(ccontext), i32=c_i32_type(ccontext)));
+",
+                i64=c_i64_type(ccontext),
+                i32=c_i32_type(ccontext),
+            ));
             (*ccontext).input_arg_defined = true;
         }
         "input_args_t"
@@ -292,7 +295,9 @@ typedef struct {{
     {i64} errno;
 }} output_args_t;
 
-", i64=c_i64_type(ccontext)));
+",
+                i64=c_i64_type(ccontext),
+            ));
             (*ccontext).output_arg_defined = true;
         }
         "output_args_t"
@@ -1547,6 +1552,18 @@ impl CGenerator {
         let function = format!("f{}", func.id);
         self.c_functions.insert(func.id, function);
 
+        let mut arg_tys = self.c_argument_types(func)?;
+        arg_tys.push(self.c_run_handle_type());
+        let args_line = self.c_define_args(&arg_tys);
+        let ret_ty = self.c_type(&func.return_type)?.to_string();
+        let function = &self.c_functions[&func.id];
+        (*self.ccontext()).prelude_code.add(format!(
+            "{ret_ty} {fun}({args});",
+            ret_ty=ret_ty,
+            fun=function,
+            args=args_line,
+        ));
+
         // for LLVM
         let mut arg_tys = self.argument_types(func)?;
         arg_tys.push(self.run_handle_type());
@@ -1582,9 +1599,11 @@ impl CGenerator {
         // function parameters are always enumerated alphabetically sorted by symbol name.
         for (symbol, ty) in context.sir_function.params.iter() {
             // for C
-            context.body.add(format!("{ty} {name};",
-                             ty=self.c_type(ty)?,
-                             name=symbol));
+            context.body.add(format!(
+                "{ty} {name};",
+                ty=self.c_type(ty)?,
+                name=symbol,
+            ));
             // for LLVM
             let name = CString::new(symbol.to_string()).unwrap();
             let value = LLVMBuildAlloca(context.builder, self.llvm_type(ty)?, name.as_ptr());
@@ -1657,7 +1676,8 @@ impl CGenerator {
         let args_line = self.c_define_args(&arg_tys);
         let ret_ty = self.c_type(&func.return_type)?.to_string();
         let function = &self.c_functions[&func.id];
-        context.body.add(format!("{ret_ty} {fun}({args})",
+        context.body.add(format!(
+            "{ret_ty} {fun}({args})",
             ret_ty=ret_ty,
             fun=function,
             args=args_line,
