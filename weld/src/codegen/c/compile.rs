@@ -34,6 +34,7 @@ use crate::codegen::c::intrinsic;
 use crate::codegen::c::llvm_exts::*;
 
 static ONCE: Once = ONCE_INIT;
+static ONCE_VEO: Once = ONCE_INIT;
 static mut INITIALIZE_FAILED: bool = false;
 
 /// The callable function type.
@@ -120,6 +121,21 @@ pub unsafe fn init() {
     }
 }
 
+unsafe fn init_veo() {
+    use crate::util::veoffload::*;
+    use libc::atexit;
+
+    ONCE_VEO.call_once(|| {
+        // without veorun and dynamic lib
+        initialize_veo_global(None, None);
+
+        let ret = atexit(finalize_veo_global);
+        if ret as isize != 0 {
+            panic!("fail to add veo finalization at exit");
+        }
+    });
+}
+
 pub fn write_code(
     code: String,
 ) -> WeldResult<String> {
@@ -150,6 +166,13 @@ pub unsafe fn compile(
     conf: &ParsedConf,
     stats: &mut CompilationStats,
 ) -> WeldResult<CompiledModule> {
+
+    let start = PreciseTime::now();
+    init_veo();
+    let end = PreciseTime::now();
+    stats
+        .llvm_times
+        .push(("VE Offload initialization".to_string(), start.to(end)));
 
     // Write code to a file
     let filename = write_code(code)?;

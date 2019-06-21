@@ -31,6 +31,7 @@ type I64Func = extern "C" fn(i64) -> i64;
 
 // Use CompiledModule defined in compile.rs
 use crate::codegen::c::compile::*;
+use crate::util::veoffload::VeoCommandState::VeoCommandOk;
 
 // The codegen interface requires that modules implement this trait. This allows supporting
 // multiple backends via dynamic dispatch.
@@ -38,6 +39,13 @@ impl Runnable for CompiledModule {
     fn run(&self, arg: i64, stats: &mut RunStats) -> Result<i64, WeldError> {
         use crate::runtime::WeldRuntimeErrno;
         unsafe {
+            let veo_ptr = get_global_veo_ptr();
+            let start = PreciseTime::now();
+            while !(*veo_ptr).ready {}
+            let end = PreciseTime::now();
+            stats.run_times.push(("wait initialize veo".to_string(), start.to(end)));
+
+            /*
             let start = PreciseTime::now();
             let node = get_ve_node_number();
             // Instanciate VE proc.
@@ -55,6 +63,9 @@ impl Runnable for CompiledModule {
             if ctx.is_null() {
                 return weld_err!("cannot create veo context");
             }
+            */
+
+            /*
             // Load generated shared-object by Weld on VE.
             let start = PreciseTime::now();
             let libname = format!("./{}", self.filename);
@@ -66,6 +77,14 @@ impl Runnable for CompiledModule {
             if handle == 0 {
                 return weld_err!("cannot load library {}", libname);
             }
+            */
+            let start = PreciseTime::now();
+            let libname = format!("./{}", self.filename);
+            let libhdl_run = (*veo_ptr).load_library(libname)?;
+            let end = PreciseTime::now();
+            stats.run_times.push(("veo_load_library".to_string(), start.to(end)));
+
+            /*
             // Retreieve entry function address on VE.
             let args = veo_args_alloc();
             let start = PreciseTime::now();
@@ -81,6 +100,7 @@ impl Runnable for CompiledModule {
             // println!("params is {:?}", self.params);
             // println!("ret_ty is {:?}", self.ret_ty);
             // println!("encoded_params is {}", self.encoded_params);
+            */
 
             // Prepare arguments for entry function.
             let start = PreciseTime::now();
@@ -124,6 +144,7 @@ impl Runnable for CompiledModule {
             // the the struct of parameters, so reduce 8.
             let sz = input_size + data_size - 8;
 
+            /*
             // Allocate VE memory.
             let mut addr_ve: uint64_t = 0;
             let start = PreciseTime::now();
@@ -134,6 +155,11 @@ impl Runnable for CompiledModule {
                 return weld_err!("cannot allocate veo memory");
             }
             // println!("allocated size = {}", sz);
+            */
+            let start = PreciseTime::now();
+            let mut addr_ve: uint64_t = (*veo_ptr).alloc_mem(sz)?;
+            let end = PreciseTime::now();
+            stats.run_times.push(("veo_alloc_mem".to_string(), start.to(end)));
 
             // prepare arguments and whole input data
             let start = PreciseTime::now();
@@ -163,6 +189,7 @@ impl Runnable for CompiledModule {
             let end = PreciseTime::now();
             stats.run_times.push(("convert_top_params".to_string(), start.to(end)));
 
+            /*
             let start = PreciseTime::now();
             let err = veo_write_mem(proc_handle, addr_ve + 0,
                                     &buffer[0] as *const u8 as *const c_void,
@@ -172,16 +199,29 @@ impl Runnable for CompiledModule {
             if err != 0 {
                 return weld_err!("cannot write veo memory");
             }
+            */
+            let start = PreciseTime::now();
+            (*veo_ptr).write_mem(&buffer[0] as *const u8 as *const c_void, addr_ve + 0, sz);
+            let end = PreciseTime::now();
+            stats.run_times.push(("veo_write_mem".to_string(), start.to(end)));
 
+            /*
             let start = PreciseTime::now();
             veo_args_clear(args);
             veo_args_set_u64(args, 0, addr_ve);
             let end = PreciseTime::now();
             stats.run_times.push(("prepare arguments".to_string(), start.to(end)));
+            */
+            let start = PreciseTime::now();
+            let args = VEOffload::args_alloc();
+            VEOffload::args_set(args, 0, addr_ve);
+            let end = PreciseTime::now();
+            stats.run_times.push(("prepare arguments".to_string(), start.to(end)));
+
+            /*
             let start = PreciseTime::now();
             let id = veo_call_async(ctx, fun, args);
             // println!("running id {}", id);
-
             let mut retval_ve_ptr: uint64_t = 0;
             let wait = veo_call_wait_result(ctx, id, &mut retval_ve_ptr);
             let end = PreciseTime::now();
@@ -194,9 +234,14 @@ impl Runnable for CompiledModule {
                 VeoCommandState::VeoCommandOk => WeldRuntimeErrno::Success,
                 _ => WeldRuntimeErrno::Unknown,
             };
+            */
+            let start = PreciseTime::now();
+            let mut retval_ve_ptr: uint64_t = (*veo_ptr).call_and_wait(libhdl_run, "run", args)?;
+            let errno = WeldRuntimeErrno::Success;
+            let end = PreciseTime::now();
+            stats.run_times.push(("call run".to_string(), start.to(end)));
 
             let start = PreciseTime::now();
-
             // Allocate and read WeldOutputArgs from VE memory.
             //      WeldOutputArgs
             //   0: intptr_t output
@@ -208,6 +253,7 @@ impl Runnable for CompiledModule {
             let ret = weld_runst_malloc(context, output_size as i64)
                 as *mut WeldOutputArgs;
             if errno != WeldRuntimeErrno::Unknown {
+                /*
                 let err = veo_read_mem(proc_handle,
                                        ret as *mut c_void,
                                        retval_ve_ptr,
@@ -216,22 +262,28 @@ impl Runnable for CompiledModule {
                 if err != 0 {
                     return weld_err!("cannot read veo memory");
                 }
+                */
+                (*veo_ptr).read_mem(retval_ve_ptr, ret as *mut c_void, output_size)?;
                 // FIXME: need to handle VE's run correctly for latter calls.
                 // Overwrite `run` using HOST's run.
                 (*ret).run = run;
             } else {
+                // NOTE: never pass below
                 (*ret).output = 0;
                 (*ret).run = run;
                 (*ret).errno = errno;
             }
             // Copy VE's output to VH if calculation was succeeded
             if (*ret).errno == WeldRuntimeErrno::Success {
+                let proc_handle = (*veo_ptr).proc;
                 self.convert_results(&self.ret_ty, (*ret).output as u64,
                                      &mut (*ret).output as *mut i64 as u64,
                                      proc_handle)?;
             }
             let end = PreciseTime::now();
             stats.run_times.push(("convert_results".to_string(), start.to(end)));
+
+            /*
             let start = PreciseTime::now();
             veo_args_free(args);
             let err = veo_free_mem(proc_handle, addr_ve);
@@ -248,6 +300,13 @@ impl Runnable for CompiledModule {
             }
             let end = PreciseTime::now();
             stats.run_times.push(("free and destroy".to_string(), start.to(end)));
+            */
+            let start = PreciseTime::now();
+            VEOffload::args_free(args);
+            (*veo_ptr).free_mem(addr_ve)?;
+            let end = PreciseTime::now();
+            stats.run_times.push(("free and destroy".to_string(), start.to(end)));
+
             Ok(ret as i64)
         }
     }
