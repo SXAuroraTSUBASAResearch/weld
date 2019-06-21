@@ -496,9 +496,18 @@ impl CompiledModule {
                 match **elem {
                     Scalar(_) | Simd(_) => {
                         unsafe {
-                            ptr::copy_nonoverlapping(elem_data as *const u8,
-                                                     vh_elem_ptr as *mut u8,
-                                                     sz as usize);
+                            // currently not to use parallel copy because it is very slow. The reason may be host memory is not pin-down
+                            let num_thread = 1;
+                            if num_thread > 1 && sz >= 1024 {  // sz is rough threshold
+                                copy_nonoverlapping_parallel(elem_data as *const u8,
+                                                             vh_elem_ptr as *mut u8,
+                                                             sz as usize,
+                                                             num_thread);
+                            } else {
+                                ptr::copy_nonoverlapping(elem_data as *const u8,
+                                                         vh_elem_ptr as *mut u8,
+                                                         sz as usize);
+                            }
                         }
                         Ok(())
                     }
@@ -758,3 +767,30 @@ unsafe fn free(raw: *mut u8, len : usize) {
     let _ = Box::from_raw(s);
 }
 
+// should defined elsewhere
+unsafe fn copy_nonoverlapping_parallel<T: Copy>(src: *const T, dst: *mut T, count: usize, nthread: usize) {
+    use std::thread;
+
+    assert!(nthread > 0);
+
+    let base = count / nthread;
+    let xth = count % nthread;
+
+    let mut childs = Vec::new();
+    for th in 0..nthread {
+        let sz = if th < xth { base + 1 } else { base };
+        let off = if th < xth { base * th + th} else { base * th + xth};
+        let _src = src as u64;
+        let _dst = dst as u64;
+
+        let ch = thread::spawn(move || {
+            for i in 0..sz {
+                *(_dst as *mut T).offset((off + i) as isize) = *(_src as *const T).offset((off + i) as isize);
+            }
+        });
+        childs.push(ch);
+    }
+    for ch in childs.into_iter() {
+        let res = ch.join();
+    }
+}
