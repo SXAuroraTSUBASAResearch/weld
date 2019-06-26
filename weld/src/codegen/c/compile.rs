@@ -44,7 +44,7 @@ type I64Func = extern "C" fn(i64) -> i64;
 pub struct CompiledModule {
     context: LLVMContextRef,
     module: LLVMModuleRef,
-    engine: LLVMExecutionEngineRef,
+    // engine: LLVMExecutionEngineRef,
     // for C
     pub filename: String,
     pub encoded_params: String,
@@ -62,6 +62,7 @@ impl CompiledModule {
     /// Dumps assembly for this module.
     pub fn asm(&self) -> WeldResult<String> {
         unsafe {
+            /*
             let mut output_buf = ptr::null_mut();
             let mut err = ptr::null_mut();
             let target = LLVMGetExecutionEngineTargetMachine(self.engine);
@@ -87,6 +88,8 @@ impl CompiledModule {
                 LLVMDisposeMemoryBuffer(output_buf);
                 Ok(c_str)
             }
+            */
+            Ok("no asm for C CogeGen".to_string())
         }
     }
 
@@ -108,7 +111,7 @@ impl Drop for CompiledModule {
     fn drop(&mut self) {
         unsafe {
             // Engine owns the module, so do not drop it explicitly.
-            LLVMDisposeExecutionEngine(self.engine);
+            // LLVMDisposeExecutionEngine(self.engine);
             LLVMContextDispose(self.context);
         }
     }
@@ -210,14 +213,14 @@ pub unsafe fn compile(
     init();
 
     let start = PreciseTime::now();
-    verify_module(module)?;
+    // verify_module(module)?;
     let end = PreciseTime::now();
     stats
         .llvm_times
         .push(("Module Verification".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
-    optimize_module(module, conf)?;
+    // optimize_module(module, conf)?;
     let end = PreciseTime::now();
     stats
         .llvm_times
@@ -225,7 +228,7 @@ pub unsafe fn compile(
 
     let start = PreciseTime::now();
     // Takes ownership of the module.
-    let engine = create_exec_engine(module, mappings, conf)?;
+    // let engine = create_exec_engine(module, mappings, conf)?;
     let end = PreciseTime::now();
     stats
         .llvm_times
@@ -240,7 +243,7 @@ pub unsafe fn compile(
     let result = CompiledModule {
         context,
         module,
-        engine,
+        // engine,
         filename: shared_object,
         encoded_params: "".to_string(),
         params,

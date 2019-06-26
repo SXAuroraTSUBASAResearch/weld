@@ -265,11 +265,11 @@ impl NumericExpressionGen for CGenerator {
                 _ => unreachable!(),
             };
             let c_child = ctx.c_get_value(child)?;
-            let child = self.load(ctx.builder, ctx.get_value(child)?)?;
+            // let child = self.load(ctx.builder, ctx.get_value(child)?)?;
 
             // Use the LLVM intrinsic if one is available, since LLVM may be able to vectorize it.
             // Otherwise, fall back to the libc math variant and unroll SIMD values manually.
-            let result = if let Some(name) = op.llvm_intrinsic() {
+            if let Some(name) = op.llvm_intrinsic() {
                 use crate::ast::ScalarKind::{F32, F64};
                 use crate::ast::UnaryOpKind::*;
                 let c_name = match (op, kind) {
@@ -286,7 +286,8 @@ impl NumericExpressionGen for CGenerator {
                     _ => unreachable!(),
                 };
                 let name = Intrinsics::llvm_numeric(name, kind, simd);
-                let ret_ty = LLVMTypeOf(child);
+                // let ret_ty = LLVMTypeOf(child);
+                let ret_ty = self.llvm_type(&Scalar(kind))?;
                 let c_ret_ty = &self.c_type(&Scalar(kind))? as &str;
                 let mut arg_tys = [ret_ty];
                 let c_arg_tys = [c_ret_ty];
@@ -299,7 +300,7 @@ impl NumericExpressionGen for CGenerator {
                     call,
                 ));
                 // for LLVM
-                self.intrinsics.call(ctx.builder, name, &mut [child])?
+                // self.intrinsics.call(ctx.builder, name, &mut [child])?
             } else {
                 use crate::ast::ScalarKind::{F32, F64};
                 use crate::ast::UnaryOpKind::*;
@@ -338,11 +339,12 @@ impl NumericExpressionGen for CGenerator {
                         call,
                     ));
                     // for LLVM
-                    self.intrinsics.call(ctx.builder, name, &mut [child])?
+                    // self.intrinsics.call(ctx.builder, name, &mut [child])?
                 } else {
                     // for C
                     ctx.body.add(format!("#error UnaryOp of SIMD for {} is not implemented yet", name));
                     // for LLVM
+                    /*
                     let mut result = LLVMGetUndef(LLVMVectorType(ret_ty, LLVM_VECTOR_WIDTH));
                     for i in 0..LLVM_VECTOR_WIDTH {
                         let element = LLVMBuildExtractElement(
@@ -361,10 +363,13 @@ impl NumericExpressionGen for CGenerator {
                         );
                     }
                     result
+                    */
                 }
             };
+            /*
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             LLVMBuildStore(ctx.builder, result, output);
+            */
             Ok(())
         } else {
             unreachable!()
@@ -445,7 +450,7 @@ impl NumericExpressionGen for CGenerator {
         } = statement.kind
         {
             let ty = ctx.sir_function.symbol_type(left)?;
-            let result = match *ty {
+            match *ty {
                 Scalar(_) | Simd(_) => {
                     // for C
                     let c_left = ctx.c_get_value(left)?;
@@ -462,6 +467,7 @@ impl NumericExpressionGen for CGenerator {
                     ));
 
                     // for LLVM
+                    /*
                     let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
                     let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
                     let result = match op {
@@ -475,11 +481,13 @@ impl NumericExpressionGen for CGenerator {
                     } else {
                         result
                     }
+                    */
                 }
                 Vector(_) | Struct(_) if op.is_comparison() => {
                     // for C
                     ctx.body.add(format!("#error vector/struct BinOp cmp for {} is not implemented yet", self.c_type(ty)?));
                     // for LLVM
+                    /*
                     // Note that we assume structs being compared have the same type.
                     let result = match op {
                         BinOpKind::Equal | BinOpKind::NotEqual => {
@@ -554,12 +562,15 @@ impl NumericExpressionGen for CGenerator {
 
                     // Extend the `i1` result to a boolean.
                     self.i1_to_bool(ctx.builder, result)
+                    */
                 }
                 // Invalid binary operator.
                 _ => unreachable!(),
             };
+            /*
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             let _ = LLVMBuildStore(ctx.builder, result, output);
+            */
             Ok(())
         } else {
             unreachable!()
@@ -606,6 +617,7 @@ impl NumericExpressionGen for CGenerator {
                 result,
             ));
             // for LLVM
+            /*
             let mut result = if let LiteralKind::StringLiteral(ref val) = value {
                 let c_str = CString::new(val.as_str()).unwrap();
                 // Add one for the NULL-byte!
@@ -625,6 +637,7 @@ impl NumericExpressionGen for CGenerator {
             }
             let pointer = ctx.get_value(output)?;
             let _ = LLVMBuildStore(ctx.builder, result, pointer);
+            */
             Ok(())
         } else {
             unreachable!()
@@ -638,11 +651,10 @@ impl NumericExpressionGen for CGenerator {
     ) -> WeldResult<()> {
         use crate::sir::StatementKind::Cast;
         let output = &statement.output.clone().unwrap();
-        let c_output_pointer = ctx.c_get_value(output)?;
-        let output_pointer = ctx.get_value(output)?;
         let output_type = ctx.sir_function.symbol_type(output)?;
         if let Cast(ref child, _) = statement.kind {
             // for C
+            let c_output_pointer = ctx.c_get_value(output)?;
             ctx.body.add(format!(
                 "{} = ({}){};",
                 c_output_pointer,
@@ -650,8 +662,10 @@ impl NumericExpressionGen for CGenerator {
                 ctx.c_get_value(child)?,
             ));
             // for LLVM
+            /*
             let child_type = ctx.sir_function.symbol_type(child)?;
             let child_value = self.load(ctx.builder, ctx.get_value(child)?)?;
+            let output_pointer = ctx.get_value(output)?;
             let result = gen_cast(
                 ctx.builder,
                 child_value,
@@ -660,6 +674,7 @@ impl NumericExpressionGen for CGenerator {
                 self.llvm_type(output_type)?,
             )?;
             let _ = LLVMBuildStore(ctx.builder, result, output_pointer);
+            */
             Ok(())
         } else {
             unreachable!()
