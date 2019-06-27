@@ -1723,7 +1723,6 @@ impl CGenerator {
                 Ok(())
             }
             AssignLiteral(_) => {
-                // for C and LLVM
                 use self::numeric::NumericExpressionGen;
                 self.gen_assign_literal(context, statement)
             }

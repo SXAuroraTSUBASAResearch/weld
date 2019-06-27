@@ -306,17 +306,6 @@ impl Vector {
         }
     }
 
-    /// Build a constant vector given a `pointer` and `size`.
-    pub unsafe fn const_literal_from_parts(
-        &self,
-        pointer: LLVMValueRef,
-        size: LLVMValueRef,
-    ) -> LLVMValueRef {
-        let undef = LLVMGetUndef(self.vector_ty);
-        let result = LLVMConstInsertValue(undef, pointer, [POINTER_INDEX].as_mut_ptr(), 1);
-        LLVMConstInsertValue(result, size, [SIZE_INDEX].as_mut_ptr(), 1)
-    }
-
     /// Generates the `new` method on vectors and calls it.
     ///
     /// The new method allocates a buffer of size exactly `size`. The memory allocated for the
