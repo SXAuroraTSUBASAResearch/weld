@@ -193,17 +193,6 @@ pub fn compile(
             stats,
         )? };
 
-    nonfatal!(write_code(
-        module.asm()?,
-        DumpCodeFormat::Assembly,
-        &conf.dump_code
-    ));
-    nonfatal!(write_code(
-        module.llvm()?,
-        DumpCodeFormat::LLVMOpt,
-        &conf.dump_code
-    ));
-
     Ok(Box::new(module))
 }
 
