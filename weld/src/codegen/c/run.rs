@@ -131,6 +131,10 @@ impl Runnable for CompiledModule {
             let end = PreciseTime::now();
             stats.run_times.push(("from_raw".to_string(), start.to(end)));
 
+            // Check parameters
+            // println!("parameters {:?}", self.params);
+            // self.check_data(&self.params, data_ptr);
+
             // First, calculate the size of memory needed to be allocated by
             // the size of WeldInputArgs and the given data.
             let start = PreciseTime::now();
@@ -313,6 +317,63 @@ impl Runnable for CompiledModule {
 }
 
 impl CompiledModule {
+    fn check_data(&self, ty: &Type, addr: u64) -> Result<u64, WeldError> {
+        // Dump information of weld's type
+        let view = addr as *const u8;
+        println!("type {:?} addr {:?}", *ty, view);
+        // Dump memory data
+        for i in 0..16 {
+            print!("{:02x} ", unsafe {*view.offset(i)});
+        }
+        println!("");
+
+        match *ty {
+            Scalar(kind) => {
+                println!("  is Scalar({})", kind);
+                Ok(0)
+            }
+            Simd(kind) => {
+                println!("  is Simd({})", kind);
+                Ok(0)
+            }
+            Struct(ref fields) => {
+                println!("  is Struct({:?})", fields);
+                let data = unsafe {*(addr as *const u64)};
+                let mut faddr = data;
+                for f in fields.iter() {
+                    let size = self.calc_data_size(f)?;
+                    self.check_data(f, faddr);
+                    faddr += size;
+                }
+                Ok(0)
+            }
+            Vector(ref elem) => {
+                // Vector(elem) is following 16 bytes data structure.
+                //  0:  intptr_t  data
+                //  8:  u64       length
+                let data = unsafe {*(addr as *const u64)};
+                let len = unsafe {*(addr as *const i64).offset(1)};
+                println!("  is Vector(elem={}, len={})", elem, len);
+                let size = self.calc_data_size(elem)?;
+                let mut eaddr = data;
+                for i in 0..16 {
+                    self.check_data(elem, eaddr);
+                    eaddr += size;
+                }
+                Ok(0)
+            }
+            Dict(_, _) => {
+                weld_err!("Unsupported dict type {}", ty)
+            }
+            Builder(_, _) => {
+                weld_err!("Unsupported builder type {}", ty)
+            }
+            _ => {
+                weld_err!("Unsupported type {}", ty)
+            }
+        }
+    }
+
     fn calc_size(&self, ty: &Type, data: u64) -> Result<u64, WeldError> {
         Ok(self.calc_data_size(ty)? +
            self.calc_deref_size(ty, data)? +
