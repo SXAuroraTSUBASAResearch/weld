@@ -2328,7 +2328,6 @@ impl CGenerator {
         use crate::sir::Terminator::*;
         match bb.terminator {
             ProgramReturn(ref sym) => {
-                // for C
                 let value = context.c_get_value(sym)?;
                 let run = context.c_get_run();
                 let ty = self.c_type_of(&value);
@@ -2353,57 +2352,25 @@ impl CGenerator {
                     "return {};",
                     value,
                 ));
-
-                // for LLVM
-                /*
-                let value = self.load(context.builder, context.get_value(sym)?)?;
-                let run = context.get_run();
-                let ty = LLVMTypeOf(value);
-                let size = self.size_of(ty);
-                let bytes = self
-                    .intrinsics
-                    .call_weld_run_malloc(context.builder, run, size, None);
-                let pointer =
-                    LLVMBuildBitCast(context.builder, bytes, LLVMPointerType(ty, 0), c_str!(""));
-                LLVMBuildStore(context.builder, value, pointer);
-                let _ = self
-                    .intrinsics
-                    .call_weld_run_set_result(context.builder, run, bytes, None);
-                LLVMBuildRet(context.builder, value);
-                */
             }
             Branch {
                 ref cond,
                 ref on_true,
                 ref on_false,
             } => {
-                // for C
-                context.body.add("#error Branch is not implemented yet");
-
-                // for LLVM
-                /*
-                let cond = self.load(context.builder, context.get_value(cond)?)?;
-                let cond = self.bool_to_i1(context.builder, cond);
-                let _ = LLVMBuildCondBr(
-                    context.builder,
-                    cond,
-                    context.get_block(*on_true)?,
-                    context.get_block(*on_false)?,
-                );
-                */
+                context.body.add(format!(
+                    "if ({}) goto {}; else goto {};",
+                    context.c_get_value(cond)?,
+                    context.c_get_block(*on_true)?,
+                    context.c_get_block(*on_false)?,
+                ));
             }
             JumpBlock(ref id) => {
-                // for C
-                context.body.add("#error JumpBlock is not implemented yet");
-
-                // for LLVM
-                /*
-                LLVMBuildBr(context.builder, context.get_block(*id)?);
-                */
+                context.body.add(format!(
+                    "goto {};", context.c_get_block(*id)?));
             }
             EndFunction(ref sym) => {
                 if let Some(c_loop_builder) = loop_terminator {
-                    // for C
                     context.body.add("// EndFunction in loop");
                     context.body.add(format!(
                         "{} = {};",
@@ -2411,26 +2378,12 @@ impl CGenerator {
                         context.c_get_value(sym)?,
                     ));
                     context.body.add("continue;");
-                    // for LLVM
-                    /*
-                    let pointer = context.get_value(sym)?;
-                    let updated_builder = self.load(context.builder, pointer)?;
-                    LLVMBuildStore(context.builder, updated_builder, loop_builder);
-                    LLVMBuildBr(context.builder, jumpto);
-                    */
                 } else {
-                    // for C
                     context.body.add("// EndFunction");
                     context.body.add(format!(
                         "return {};",
                         context.c_get_value(sym)?,
                     ));
-                    // for LLVM
-                    /*
-                    let pointer = context.get_value(sym)?;
-                    let return_value = self.load(context.builder, pointer)?;
-                    LLVMBuildRet(context.builder, return_value);
-                    */
                 }
             }
             Crash => {
