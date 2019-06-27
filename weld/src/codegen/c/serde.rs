@@ -58,6 +58,11 @@ impl SerDeGen for CGenerator {
     ) -> WeldResult<()> {
         use crate::sir::StatementKind::Serialize;
         if let Serialize(ref child) = statement.kind {
+            // for C
+            ctx.body.add("#error Serialize is not implemented yet");
+
+            // for LLVM
+            /*
             let zero = self.i64(0);
             let buffer = self.gen_new(ctx.builder, &SER_TY, zero, ctx.get_run())?;
             let child_ty = ctx.sir_function.symbol_type(child)?;
@@ -72,6 +77,7 @@ impl SerDeGen for CGenerator {
             )?;
             let output = statement.output.as_ref().unwrap();
             LLVMBuildStore(ctx.builder, serialized, ctx.get_value(output)?);
+            */
             Ok(())
         } else {
             unreachable!()
@@ -85,6 +91,11 @@ impl SerDeGen for CGenerator {
     ) -> WeldResult<()> {
         use crate::sir::StatementKind::Deserialize;
         if let Deserialize(ref child) = statement.kind {
+            // for C
+            ctx.body.add("#error Desirialize is not implemented yet");
+
+            // for LLVM
+            /*
             let output = statement.output.as_ref().unwrap();
             let output_ty = ctx.sir_function.symbol_type(output)?;
             let output = ctx.get_value(output)?;
@@ -102,6 +113,7 @@ impl SerDeGen for CGenerator {
             )?;
             // This function writes directly into the output, so a store afterward is not
             // necessary.
+            */
             Ok(())
         } else {
             unreachable!()

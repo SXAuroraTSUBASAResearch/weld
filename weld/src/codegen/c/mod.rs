@@ -1408,13 +1408,19 @@ impl CGenerator {
     /// Generates a print call with the given string.
     unsafe fn gen_print(
         &mut self,
-        builder: LLVMBuilderRef,
-        run: LLVMValueRef,
-        string: CString,
+        run: &str,
+        string: &str,
     ) -> WeldResult<()> {
+        (*self.ccontext()).body_code.add(format!(
+            "{};",
+            self.intrinsics.c_call_weld_run_print(run, string),
+        ));
+
+        /*
         let string = self.gen_global_string(builder, string);
         let pointer = LLVMConstBitCast(string, LLVMPointerType(self.i8_type(), 0));
         let _ = self.intrinsics.call_weld_run_print(builder, run, pointer);
+        */
         Ok(())
     }
 
@@ -1620,10 +1626,7 @@ impl CGenerator {
     /// blocks to the context so they can be forward referenced if necessary.
     unsafe fn gen_basic_block_defs(&mut self, context: &mut FunctionContext<'_>) -> WeldResult<()> {
         for bb in context.sir_function.blocks.iter() {
-            let name = CString::new(format!("b{}", bb.id)).unwrap();
-            let block =
-                LLVMAppendBasicBlockInContext(self.context, context.llvm_function, name.as_ptr());
-            context.blocks.insert(bb.id, block);
+            context.c_blocks.insert(bb.id, format!("b{}", bb.id));
         }
         Ok(())
     }
@@ -1643,10 +1646,9 @@ impl CGenerator {
         }
 
         // Create a context for the function.
-        let context = &mut FunctionContext::new(self.context, program, func, function);
+        let context = &mut FunctionContext::new(self.context, program, func);
 
         // Generates function definition.
-        // for C
         let mut arg_tys = self.c_argument_types(func)?;
         arg_tys.push(self.c_run_handle_type());
         let args_line = self.c_define_args(&arg_tys);
@@ -1661,36 +1663,22 @@ impl CGenerator {
         context.body.add("{");
 
         // Generates function body.
-        // for LLVM
-        // Create the entry basic block, where we define alloca'd variables.
-        let entry_bb =
-            LLVMAppendBasicBlockInContext(self.context, context.llvm_function, c_str!(""));
-        LLVMPositionBuilderAtEnd(context.builder, entry_bb);
-
-        // for C and LLVM
         self.gen_allocas(context)?;
         self.gen_store_parameters(context)?;
         self.gen_basic_block_defs(context)?;
 
         // Jump from locals to the first basic block.
-        // for C
         context.body.add(format!(
             "goto {};",
-            context.c_get_block(func.blocks[0].id),
+            context.c_get_block(func.blocks[0].id)?,
         ));
-        // for LLVM
-        LLVMPositionBuilderAtEnd(context.builder, entry_bb);
-        LLVMBuildBr(context.builder, context.get_block(func.blocks[0].id)?);
 
         // Generate code for the basic blocks in order.
         for bb in func.blocks.iter() {
-            // for C
             context.body.add(format!(
                 "{}:",
-                context.c_get_block(func.blocks[0].id),
+                context.c_get_block(func.blocks[0].id)?,
             ));
-            // for LLVM
-            LLVMPositionBuilderAtEnd(context.builder, context.get_block(bb.id)?);
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement)?;
             }
@@ -1719,9 +1707,8 @@ impl CGenerator {
 
         if self.conf.trace_run {
             self.gen_print(
-                context.builder,
-                context.get_run(),
-                CString::new(format!("{}", statement)).unwrap(),
+                context.c_get_run(),
+                &format!("{}", statement),
             )?;
         }
 
@@ -1819,13 +1806,8 @@ impl CGenerator {
                 Ok(())
             }
             Deserialize(_) => {
-                // for C
-                context.body.add("#error Desirialize is not implemented yet");
-
-                // for LLVM
-                //use self::serde::SerDeGen;
-                //self.gen_deserialize(context, statement)
-                Ok(())
+                use self::serde::SerDeGen;
+                self.gen_deserialize(context, statement)
             }
             GetField { ref value, index } => {
                 // for C
@@ -2094,17 +2076,14 @@ impl CGenerator {
                 Ok(())
             }
             NewBuilder { .. } => {
-                // for C and LLVM
                 use self::builder::BuilderExpressionGen;
                 self.gen_new_builder(context, statement)
             }
             ParallelFor(_) => {
-                // for C and LLVM
                 use self::builder::BuilderExpressionGen;
                 self.gen_for(context, statement)
             }
             Res(_) => {
-                // for C and LLVM
                 use self::builder::BuilderExpressionGen;
                 self.gen_result(context, statement)
             }
@@ -2129,13 +2108,8 @@ impl CGenerator {
                 Ok(())
             }
             Serialize(_) => {
-                // for C
-                context.body.add("#error Serialize is not implemented yet");
-
-                // for LLVM
-                // use self::serde::SerDeGen;
-                // self.gen_serialize(context, statement)
-                Ok(())
+                use self::serde::SerDeGen;
+                self.gen_serialize(context, statement)
             }
             Slice {
                 ref child,
@@ -2347,9 +2321,8 @@ impl CGenerator {
     ) -> WeldResult<()> {
         if self.conf.trace_run {
             self.gen_print(
-                context.builder,
-                context.get_run(),
-                CString::new(format!("{}", bb.terminator)).unwrap(),
+                context.c_get_run(),
+                &format!("{}", bb.terminator),
             )?;
         }
 
@@ -2701,8 +2674,6 @@ pub struct FunctionContext<'a> {
     ///
     /// Equivalently, this context represents code generation state for this function.
     sir_function: &'a SirFunction,
-    /// An LLVM reference to this function.
-    llvm_function: LLVMValueRef,
     /// The LLVM values for symbols defined in this function.
     ///
     /// These symbols are the ones defined in the SIR (i.e., locals and parameters). The symbols
@@ -2711,6 +2682,7 @@ pub struct FunctionContext<'a> {
     c_symbols: FnvHashMap<Symbol, String>,
     /// A mapping from SIR basic blocks to LLVM basic blocks.
     blocks: FnvHashMap<BasicBlockId, LLVMBasicBlockRef>,
+    c_blocks: FnvHashMap<BasicBlockId, String>,
     /// The LLVM builder, which marks where to insert new code.
     builder: LLVMBuilderRef,
 
@@ -2727,16 +2699,15 @@ impl<'a> FunctionContext<'a> {
         llvm_context: LLVMContextRef,
         sir_program: &'a SirProgram,
         sir_function: &'a SirFunction,
-        llvm_function: LLVMValueRef,
     ) -> FunctionContext<'a> {
         FunctionContext {
             sir_program,
             sir_function,
-            llvm_function,
             builder: unsafe { LLVMCreateBuilderInContext(llvm_context) },
             symbols: FnvHashMap::default(),
             c_symbols: FnvHashMap::default(),
             blocks: FnvHashMap::default(),
+            c_blocks: FnvHashMap::default(),
             var_ids: IdGenerator::new("t"),
             body: CodeBuilder::new(),
             bb_index: 0,
@@ -2770,16 +2741,16 @@ impl<'a> FunctionContext<'a> {
             .cloned()
             .ok_or_else(|| WeldCompileError::new("Undefined basic block in function codegen"))
     }
-    pub fn c_get_block(&self, id: BasicBlockId) -> String {
-        format!("b{}", id)
+    pub fn c_get_block(&self, id: BasicBlockId) -> WeldResult<String> {
+        self.c_blocks
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| WeldCompileError::new("Undefined basic block in function codegen"))
     }
 
     /// Get the handle to the run.
     ///
-    /// The run handle is always the last argument of an SIR function.
-    pub fn get_run(&self) -> LLVMValueRef {
-        unsafe { LLVMGetLastParam(self.llvm_function) }
-    }
+    /// The run handle has always "run" as its name.
     pub fn c_get_run(&self) -> &'static str {
         "run"
     }

@@ -245,11 +245,8 @@ impl Hash for CGenerator {
         value: LLVMValueRef,
     ) -> LLVMValueRef {
         if self.conf.trace_run {
-            use std::ffi::CString;
-            let string = CString::new(format!("Hashing bitwidth {}", kind)).unwrap();
-            let rht = self.run_handle_type();
-            let rht = LLVMConstPointerNull(rht);
-            self.gen_print(builder, rht, string).unwrap();
+            let string = format!("Hashing bitwidth {}", kind);
+            self.gen_print("0", &string).unwrap();
         }
 
         match kind {

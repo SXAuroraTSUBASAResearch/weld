@@ -447,6 +447,15 @@ impl Intrinsics {
             c_str!(""),
         )
     }
+    pub unsafe fn c_call_weld_run_print(
+        &mut self,
+        run: &str,
+        string: &str,
+    ) -> String {
+        let args = [run, string];
+        self.c_call("weld_runst_print", &args)
+    }
+
 
     /// Convinience wrapper for calling `memcpy`.
     ///
@@ -860,6 +869,14 @@ void weld_runst_set_errno({run_handle} run, {i64} errno)
             name.into_string().unwrap(),
             Intrinsic::FunctionPointer(function, ffi::weld_runst_print as *mut c_void),
         );
+        (*self.ccontext()).prelude_code.add(format!("\
+void weld_runst_print({run_handle} run, {i8}* string)
+{{
+    printf(\"%s\\n\", string);
+}}",
+            run_handle=self.c_run_handle_type(),
+            i8=self.c_i8_type(),
+        ));
 
         let mut params = vec![
             int8p,

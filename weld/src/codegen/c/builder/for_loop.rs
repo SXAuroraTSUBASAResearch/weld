@@ -279,22 +279,8 @@ impl ForLoopGenInternal for CGenerator {
         assert_eq!(builders.len(), 1);
         let weld_ty = &builders[0];
 
-        // for LLVM
-        let mut arg_tys = self.argument_types(func)?;
-        // The second-to-last argument is the *total* number of iterations across all threads (in a
-        // multi-threaded setting) that this loop will execute for.
-        arg_tys.push(self.i64_type());
-        let num_iterations_index = (arg_tys.len() - 1) as u32;
-        // Last argument is run handle, as always.
-        arg_tys.push(self.run_handle_type());
-
-        let ret_ty = self.llvm_type(weld_ty)?;
-        let func_ty = LLVMFunctionType(ret_ty, arg_tys.as_mut_ptr(), arg_tys.len() as u32, 0);
-        let name = CString::new(format!("f{}_loop", func.id)).unwrap();
-        let function = LLVMAddFunction(self.module, name.as_ptr(), func_ty);
-
         // Create a context for the function.
-        let context = &mut FunctionContext::new(self.context, program, func, function);
+        let context = &mut FunctionContext::new(self.context, program, func);
 
         // Generate function definition.
         // for C
@@ -356,7 +342,7 @@ impl ForLoopGenInternal for CGenerator {
             // for C
             context.body.add(format!(
                 "{}:",
-                context.c_get_block(bb.id),
+                context.c_get_block(bb.id)?,
             ));
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement)?;
