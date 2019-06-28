@@ -419,6 +419,121 @@ impl Appender {
         Ok(())
     }
 
+    // VE-Weld NO_RESIZE begin
+    unsafe fn define_merge_no_resize(
+        &mut self,
+        intrinsics: &mut Intrinsics,
+        vectorized: bool,
+    ) -> WeldResult<()> {
+        // Number of elements merged in at once.
+        let (merge_ty, c_merge_ty, num_elements) = if vectorized {
+            (
+                LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH),
+                self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH),
+                LLVM_VECTOR_WIDTH,
+            )
+        } else {
+            (self.elem_ty, self.c_elem_ty.clone(), 1)
+        };
+
+        // use C name
+        let name = if vectorized {
+            format!("{}_vmerge_no_resize", self.name)
+        } else {
+            format!("{}_merge_no_resize", self.name)
+        };
+
+        let mut arg_tys = [
+            LLVMPointerType(self.appender_ty, 0),
+            merge_ty,
+        ];
+        let c_arg_tys = [
+            self.c_pointer_type(&self.name),
+            c_merge_ty,
+        ];
+        let ret_ty = LLVMVoidTypeInContext(self.context);
+        let c_ret_ty = &self.c_void_type();
+        let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), true);
+
+        // for C
+        c_code.add("{");
+        let appender = self.c_get_param(0);
+        let merge_value = self.c_get_param(1);
+        c_code.add(format!(
+            "{app}->data[{app}->size++] = {val};",
+            app=appender,
+            val=merge_value,
+        ));
+        c_code.add("}");
+        (*self.ccontext()).prelude_code.add(c_code.result());
+
+        // for LLVM
+        LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
+
+        let full_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("isFull"));
+        let finish_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("finish"));
+
+        // Builder is positioned at the entry block - attempt to merge in value.
+
+        let appender = LLVMGetParam(function, 0);
+        let merge_value = LLVMGetParam(function, 1);
+
+        let size_slot = LLVMBuildStructGEP(builder, appender, SIZE_INDEX, c_str!(""));
+        let size = LLVMBuildLoad(builder, size_slot, c_str!("size"));
+
+        let capacity_slot = LLVMBuildStructGEP(builder, appender, CAPACITY_INDEX, c_str!(""));
+        let capacity = LLVMBuildLoad(builder, capacity_slot, c_str!("capacity"));
+
+        let new_size = LLVMBuildNSWAdd(
+            builder,
+            self.i64(i64::from(num_elements)),
+            size,
+            c_str!("newSize"),
+        );
+
+        let full = LLVMBuildICmp(builder, LLVMIntSGT, new_size, capacity, c_str!("full"));
+        LLVMBuildCondBr(builder, full, full_block, finish_block);
+
+        // Build the case where the appender is full and we need to alloate more memory.
+        LLVMPositionBuilderAtEnd(builder, full_block);
+        let new_capacity = LLVMBuildNSWMul(builder, capacity, self.i64(2), c_str!("newCapacity"));
+        let elem_size = self.size_of(self.elem_ty);
+        let alloc_size = LLVMBuildMul(builder, elem_size, new_capacity, c_str!("allocSize"));
+        let base_pointer = self.gen_index(builder, appender, None)?;
+        let raw_pointer = LLVMBuildBitCast(
+            builder,
+            base_pointer,
+            LLVMPointerType(self.i8_type(), 0),
+            c_str!("rawPtr"),
+        );
+        LLVMBuildStore(builder, new_capacity, capacity_slot);
+        LLVMBuildBr(builder, finish_block);
+
+        // Build the finish block, which merges the value.
+        LLVMPositionBuilderAtEnd(builder, finish_block);
+
+        let mut merge_pointer = self.gen_index(builder, appender, Some(size))?;
+        if vectorized {
+            merge_pointer = LLVMBuildBitCast(
+                builder,
+                merge_pointer,
+                LLVMPointerType(merge_ty, 0),
+                c_str!(""),
+            );
+        }
+        let store_inst = LLVMBuildStore(builder, merge_value, merge_pointer);
+        if vectorized {
+            LLVMSetAlignment(store_inst, 1);
+        }
+        LLVMBuildStore(builder, new_size, size_slot);
+        LLVMBuildRetVoid(builder);
+
+        LLVMDisposeBuilder(builder);
+
+        Ok(())
+    }
+    // VE-Weld NO_RESIZE end
+
     /// Generates code to merge a value into an appender.
     pub unsafe fn gen_merge(
         &mut self,
@@ -462,22 +577,36 @@ impl Appender {
         builder_arg: &str,
         value_arg: &str,
         ty: &Type,
+        is_no_resize: bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<String> {
         use crate::ast::Type::Simd;
         let vectorized = if let Simd(_) = ty { true } else { false };
         if vectorized && self.vmerge.is_none() {
             self.define_merge(intrinsics, true)?;
+            self.define_merge_no_resize(intrinsics, true)?;     // VE-Weld NO_RESIZE
         } else if !vectorized && self.merge.is_none() {
             self.define_merge(intrinsics, false)?;
+            self.define_merge_no_resize(intrinsics, false)?;     // VE-Weld NO_RESIZE
         }
 
-        Ok(format!(
-            "{}(&{}, {}, {})",
-            if vectorized { &self.c_vmerge } else { &self.c_merge },
-            builder_arg,
-            value_arg,
-            run_arg,
-        ))
+        if !is_no_resize {  // VE-Weld NO_RESIZE
+            Ok(format!(
+                "{}(&{}, {}, {})",
+                if vectorized { &self.c_vmerge } else { &self.c_merge },
+                builder_arg,
+                value_arg,
+                run_arg,
+            ))
+        // VE-Weld NO_RESIZE begin
+        } else {
+            Ok(format!(
+                "{}_no_resize(&{}, {})",
+                if vectorized { &self.c_vmerge } else { &self.c_merge },
+                builder_arg,
+                value_arg,
+            ))
+        }
+        // VE-Weld NO_RESIZE end
     }
 
     /// Generates code to get the result from an appender.

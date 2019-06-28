@@ -62,6 +62,7 @@ pub trait BuilderExpressionGen {
         &mut self,
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
+        is_no_resize: bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<()>;
     /// Generates code for the `Result` statement.
     unsafe fn gen_result(
@@ -351,6 +352,7 @@ impl BuilderExpressionGen for CGenerator {
         &mut self,
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
+        is_no_resize: bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<()> {
         let m = MergeStatement::extract(statement, ctx.sir_function)?;
         // let builder_pointer = ctx.get_value(m.builder)?;
@@ -368,6 +370,7 @@ impl BuilderExpressionGen for CGenerator {
                         &c_builder_pointer,
                         &ctx.c_get_value(m.value)?,
                         ty,
+                        is_no_resize,    // VE-Weld NO_RESIZE
                     )?,
                 ));
 
