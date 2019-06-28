@@ -77,16 +77,16 @@ extern "C" {
                                 RetVal: *mut uint64_t)
                                 -> VeoCommandState;
     pub fn veo_alloc_mem(PH: VeoProcHandleRef, Addr: *mut uint64_t,
-                         Size: uint64_t) -> c_int;
+                         Size: usize) -> c_int;
     pub fn veo_free_mem(PH: VeoProcHandleRef, Addr: uint64_t) -> c_int;
     pub fn veo_read_mem(PH: VeoProcHandleRef, Data: *mut c_void,
-                        Addr: uint64_t, Size: uint64_t) -> c_int;
+                        Addr: uint64_t, Size: usize) -> c_int;
     pub fn veo_write_mem(PH: VeoProcHandleRef, Addr: uint64_t,
-                         Data: *const c_void, Size: uint64_t) -> c_int;
+                         Data: *const c_void, Size: usize) -> c_int;
     pub fn veo_async_read_mem(Ctx: VeoThrContextRef, Data: *mut c_void,
-                              Addr: uint64_t, Size: uint64_t) -> uint64_t;
+                              Addr: uint64_t, Size: usize) -> uint64_t;
     pub fn veo_async_write_mem(Ctx: VeoThrContextRef, Addr: uint64_t,
-                               Data: *const c_void, Size: uint64_t) -> uint64_t;
+                               Data: *const c_void, Size: usize) -> uint64_t;
 }
 
 
@@ -218,9 +218,9 @@ impl VEOffload {
         Ok(retp)
     }
 
-    pub unsafe fn alloc_mem(&mut self, size: u64) -> WeldResult<u64> {
+    pub unsafe fn alloc_mem(&mut self, size: usize) -> WeldResult<u64> {
         let mut addr: uint64_t = 0;
-        let err = veo_alloc_mem(self.proc, &mut addr as *mut uint64_t, size as uint64_t);
+        let err = veo_alloc_mem(self.proc, &mut addr as *mut uint64_t, size);
         if err != 0 {
             return weld_err!("alloc memory");
         } else {
@@ -237,16 +237,16 @@ impl VEOffload {
         }
     }
 
-    pub unsafe fn read_mem(&self, src: u64, dst: *mut c_void, len: u64) -> WeldResult<()> {
-        let err = veo_read_mem(self.proc, dst, src as uint64_t, len as uint64_t);
+    pub unsafe fn read_mem(&self, src: u64, dst: *mut c_void, len: usize) -> WeldResult<()> {
+        let err = veo_read_mem(self.proc, dst, src as uint64_t, len);
         if err != 0 {
             return weld_err!("veo read mem: failed");
         }
         Ok(())
     }
 
-    pub unsafe fn write_mem(&self, src: *const c_void, dst: u64, len: u64) -> WeldResult<()> {
-        let err = veo_write_mem(self.proc, dst as uint64_t, src, len as uint64_t);
+    pub unsafe fn write_mem(&self, src: *const c_void, dst: u64, len: usize) -> WeldResult<()> {
+        let err = veo_write_mem(self.proc, dst as uint64_t, src, len);
         if err != 0 {
             return weld_err!("veo write mem: failed");
         }
