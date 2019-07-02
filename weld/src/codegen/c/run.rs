@@ -5,11 +5,10 @@
 use libc;
 use time;
 
-use std::ffi::CString;
 use std::ptr;
 use std::sync::{Once, ONCE_INIT};
 
-use libc::{uint64_t, c_char, c_void};
+use libc::{uint64_t, c_void};
 
 use self::time::PreciseTime;
 
@@ -19,7 +18,6 @@ use crate::ast::Type::*;
 use crate::ast::ScalarKind;
 use crate::util::stats::RunStats;
 use crate::util::veoffload::*;
-use crate::util::offload_ve::*;
 
 use crate::codegen::Runnable;
 
@@ -38,10 +36,9 @@ type I64Func = extern "C" fn(i64) -> i64;
 
 // Use CompiledModule defined in compile.rs
 use crate::codegen::c::compile::*;
-use crate::util::veoffload::VeoCommandState::VeoCommandOk;
 
-// The codegen interface requires that modules implement this trait. This allows supporting
-// multiple backends via dynamic dispatch.
+// The codegen interface requires that modules implement this trait.
+// This allows supporting multiple backends via dynamic dispatch.
 impl Runnable for CompiledModule {
     fn run(&self, arg: i64, stats: &mut RunStats) -> Result<i64, WeldError> {
         use crate::runtime::WeldRuntimeErrno;
@@ -50,64 +47,15 @@ impl Runnable for CompiledModule {
             let start = PreciseTime::now();
             while !(*veo_ptr).ready {}
             let end = PreciseTime::now();
-            stats.run_times.push(("wait initialize veo".to_string(), start.to(end)));
+            stats.run_times.push((
+                "wait initialize veo".to_string(), start.to(end)));
 
-            /*
-            let start = PreciseTime::now();
-            let node = get_ve_node_number();
-            // Instanciate VE proc.
-            // FIXME: call this only once.
-            let proc_handle = veo_proc_create(node);
-            let end = PreciseTime::now();
-            stats.run_times.push(("veo_proc_create".to_string(), start.to(end)));
-            if proc_handle.is_null() {
-                return weld_err!("cannot create proc");
-            }
-            let start = PreciseTime::now();
-            let ctx = veo_context_open(proc_handle);
-            let end = PreciseTime::now();
-            stats.run_times.push(("veo_context_open".to_string(), start.to(end)));
-            if ctx.is_null() {
-                return weld_err!("cannot create veo context");
-            }
-            */
-
-            /*
             // Load generated shared-object by Weld on VE.
-            let start = PreciseTime::now();
-            let libname = format!("./{}", self.filename);
-            let libcname = CString::new(libname.clone()).unwrap();
-            let libcname_raw = libcname.into_raw() as *const c_char;
-            let handle = veo_load_library(proc_handle, libcname_raw);
-            let end = PreciseTime::now();
-            stats.run_times.push(("veo_load_library".to_string(), start.to(end)));
-            if handle == 0 {
-                return weld_err!("cannot load library {}", libname);
-            }
-            */
             let start = PreciseTime::now();
             let libname = format!("./{}", self.filename);
             let libhdl_run = (*veo_ptr).load_library(libname)?;
             let end = PreciseTime::now();
             stats.run_times.push(("veo_load_library".to_string(), start.to(end)));
-
-            /*
-            // Retreieve entry function address on VE.
-            let args = veo_args_alloc();
-            let start = PreciseTime::now();
-            let funname = "run";
-            let funcname = CString::new(funname).unwrap();
-            let funcname_raw = funcname.into_raw() as *const c_char;
-            let fun = veo_get_sym(proc_handle, handle, funcname_raw);
-            let end = PreciseTime::now();
-            stats.run_times.push(("veo_get_sym".to_string(), start.to(end)));
-            if fun == 0 {
-                return weld_err!("cannot find function {}", funname);
-            }
-            // println!("params is {:?}", self.params);
-            // println!("ret_ty is {:?}", self.ret_ty);
-            // println!("encoded_params is {}", self.encoded_params);
-            */
 
             // Prepare arguments for entry function.
             let start = PreciseTime::now();
@@ -132,7 +80,7 @@ impl Runnable for CompiledModule {
                 run = context as i64;
             } else {
                 // Use existing WeldRuntimeContext.
-                // (Usually, it is created by caller)
+                // (Usually, it is created by caller of this function)
                 context = run as *mut WeldRuntimeContext;
             }
             let end = PreciseTime::now();
@@ -148,10 +96,10 @@ impl Runnable for CompiledModule {
                 input: 0,
                 nworkers,
                 mem_limit,
-                run: 0,
+                run: 0, // FIXME: need to recover VE's run if it is avilable.
             };
 
-            let (buffer, addrs_ve, whole_size) = if USE_CONVERT_TOP_PARAMS {
+            let (_buffer, addrs_ve, _buffer_size) = if USE_CONVERT_TOP_PARAMS {
                 self.send_data_using_convert_top_params(
                     &self.params,
                     data_ptr,
@@ -167,38 +115,14 @@ impl Runnable for CompiledModule {
                 )?
             };
 
-            /*
-            let start = PreciseTime::now();
-            veo_args_clear(args);
-            veo_args_set_u64(args, 0, addrs_ve[0]);
-            let end = PreciseTime::now();
-            stats.run_times.push(("prepare arguments".to_string(), start.to(end)));
-            */
             let start = PreciseTime::now();
             let args = VEOffload::args_alloc();
             VEOffload::args_set(args, 0, addrs_ve[0]);
             let end = PreciseTime::now();
             stats.run_times.push(("prepare arguments".to_string(), start.to(end)));
 
-            /*
             let start = PreciseTime::now();
-            let id = veo_call_async(ctx, fun, args);
-            // println!("running id {}", id);
-            let mut retval_ve_ptr: uint64_t = 0;
-            let wait = veo_call_wait_result(ctx, id, &mut retval_ve_ptr);
-            let end = PreciseTime::now();
-            stats.run_times.push(("call run".to_string(), start.to(end)));
-            match wait {
-                VeoCommandState::VeoCommandOk => {}
-                _ => { return weld_err!("VE causes some errors"); }
-            };
-            let errno = match wait {
-                VeoCommandState::VeoCommandOk => WeldRuntimeErrno::Success,
-                _ => WeldRuntimeErrno::Unknown,
-            };
-            */
-            let start = PreciseTime::now();
-            let mut retval_ve_ptr: uint64_t = (*veo_ptr).call_and_wait(libhdl_run, "run", args)?;
+            let retval_ve_ptr: uint64_t = (*veo_ptr).call_and_wait(libhdl_run, "run", args)?;
             let errno = WeldRuntimeErrno::Success;
             let end = PreciseTime::now();
             stats.run_times.push(("call run".to_string(), start.to(end)));
@@ -216,19 +140,9 @@ impl Runnable for CompiledModule {
             let ret = weld_runst_malloc(context, output_size as i64)
                 as *mut WeldOutputArgs;
             if errno != WeldRuntimeErrno::Unknown {
-                /*
-                let err = veo_read_mem(proc_handle,
-                                       ret as *mut c_void,
-                                       retval_ve_ptr,
-                                       output_size,
-                );
-                if err != 0 {
-                    return weld_err!("cannot read veo memory");
-                }
-                */
                 (*veo_ptr).read_mem(retval_ve_ptr, ret as *mut c_void, output_size)?;
                 // FIXME: need to handle VE's run correctly for latter calls.
-                // Overwrite `run` using HOST's run.
+                // Overwrite VE's `run` by HOST's run.
                 (*ret).run = run;
             } else {
                 // NOTE: never pass below
@@ -297,9 +211,10 @@ impl CompiledModule {
                 let data = unsafe {*(addr as *const u64)};
                 let len = unsafe {*(addr as *const i64).offset(1)};
                 println!("  is Vector(elem={}, len={})", elem, len);
+                /*
+                // Dump 16 eleements.
                 let size = self.calc_data_size(elem)?;
                 let mut eaddr = data;
-                /*
                 for i in 0..16 {
                     self.check_data(elem, eaddr)?;
                     eaddr += size as u64;
@@ -332,7 +247,7 @@ impl CompiledModule {
             // First, calculate the size of memory needed to be allocated by
             // the size of WeldInputArgs and the given data.
             let start = PreciseTime::now();
-            let data_size = self.calc_size(&self.params, data_ptr)?;
+            let data_size = self.calc_size(ty, data_ptr)?;
             let end = PreciseTime::now();
             stats.run_times.push(("calc_size".to_string(), start.to(end)));
 
@@ -364,7 +279,7 @@ impl CompiledModule {
             // println!("run {}", (*input_p).run);
 
             self.convert_top_params(
-                &self.params,
+                ty,
                 data_ptr,
                 addr_vh + input_size as u64,
                 addrs_ve[0] + input_size as u64,
@@ -373,7 +288,7 @@ impl CompiledModule {
             stats.run_times.push(("convert_top_params".to_string(), start.to(end)));
 
             let start = PreciseTime::now();
-            (*veo_ptr).write_mem(&buffer[0] as *const u8 as *const c_void, addrs_ve[0], sz);
+            (*veo_ptr).write_mem(&buffer[0] as *const u8 as *const c_void, addrs_ve[0], sz)?;
             let end = PreciseTime::now();
             stats.run_times.push(("veo_write_mem".to_string(), start.to(end)));
 
@@ -447,7 +362,6 @@ impl CompiledModule {
             }
 
             // prepare arguments and whole input data
-            let start = PreciseTime::now();
             input_generated.input = (input_size + flag_size) as i64;
             copy_nonoverlapping(input_generated as *const WeldInputArgs
                                 as *const u8, &mut buffer[0],
@@ -478,7 +392,7 @@ impl CompiledModule {
                 &mut buffer,
                 &serialized_flags,
                 &addrs_ve,
-            );
+            )?;
             let end = PreciseTime::now();
             stats.run_times.push(("deserialize_on_host".to_string(), start.to(end)));
 
@@ -490,7 +404,7 @@ impl CompiledModule {
             let start = PreciseTime::now();
             for i in 0..addrs.len() {
                 if !serialized_flags[i] {
-                    (*veo_ptr).write_mem(addrs[i], addrs_ve[i], sizes[i]);
+                    (*veo_ptr).write_mem(addrs[i], addrs_ve[i], sizes[i])?;
                 }
             }
             let end = PreciseTime::now();
@@ -677,7 +591,7 @@ impl CompiledModule {
         // Allocate buffer
         let mut buffer = Vec::<u8>::with_capacity(serialized_data_size);
         unsafe { buffer.set_len(serialized_data_size) };
-        let mut offset = input_size + flag_size;
+        let offset = input_size + flag_size;
         let mut contents_offset = input_size + flag_size + field_offset;
         let mut flag_offset = input_size;
         let mut field_offset = 0;
@@ -727,7 +641,7 @@ impl CompiledModule {
         match *ty {
             // Value of Sclar and Simd will be copied by _copy_data function.
             Scalar(_) | Simd(_) => Ok(0),
-            Struct(ref fields) => {
+            Struct(_) => {
                 weld_err!("Unsupported struct type {}", ty)
             }
             Vector(ref elem) => {
@@ -764,7 +678,7 @@ impl CompiledModule {
                         size as usize,
                     );
                 }
-                Ok((size))
+                Ok(size)
             }
             // FIXME: doesn't support Vec[Vec[i8]] or Vec[Struct[...]].
             _ => {
@@ -796,10 +710,10 @@ impl CompiledModule {
             Scalar(_) | Simd(_) => {
                 self._copy_data(ty, dest, src)
             }
-            Struct(ref fields) => {
+            Struct(_) => {
                 weld_err!("Unsupported struct type {}", ty)
             }
-            Vector(ref elem) => {
+            Vector(_) => {
                 unsafe {
                     let length = *((src + 8) as *const u64);
                     *(dest as *mut u64) = contents_offset as u64;
@@ -1294,7 +1208,7 @@ unsafe fn copy_nonoverlapping_parallel<T: Copy>(src: *const T, dst: *mut T, coun
         childs.push(ch);
     }
     for ch in childs.into_iter() {
-        let res = ch.join();
+        let _res = ch.join();
     }
 }
 
@@ -1304,7 +1218,7 @@ unsafe fn dump_data(addr: *const u8, len: usize) {
         if i % 16 == 0 {
             println!("");
         }
-        print!("{:02x} ", unsafe {*addr.offset(i)});
+        print!("{:02x} ", *addr.offset(i));
     }
     println!("");
 }
