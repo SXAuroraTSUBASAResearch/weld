@@ -409,7 +409,7 @@ impl ForLoopGenInternal for CGenerator {
                     if let Type::Vector(elem_type) = vector_type {
                         ctx.body.add(format!(
                             "{} {} = *{};",
-                            elem_type,
+                            self.c_type(elem_type)?,
                             element,
                             element_pointer,
                         ));

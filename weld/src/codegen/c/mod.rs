@@ -1909,17 +1909,14 @@ impl CGenerator {
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Vector(_) = *child_type {
                     use self::vector::VectorExt;
-                    // for C
-                    context.body.add("#error Lookup is not implemented yet");
-
-                    // for LLVM
-                    /*
-                    let index_value = self.load(context.builder, context.get_value(index)?)?;
-                    let pointer =
-                        self.gen_at(context.builder, child_type, child_value, index_value)?;
-                    let result = self.load(context.builder, pointer)?;
-                    LLVMBuildStore(context.builder, result, output_pointer);
-                    */
+                    context.body.add(format!(
+                        "{} = *{};",
+                        context.c_get_value(output)?,
+                        self.c_gen_at(context.builder,
+                                      child_type,
+                                      &context.c_get_value(child)?,
+                                      &context.c_get_value(index)?)?,
+                    ));
                     Ok(())
                 } else if let Dict(ref key, _) = *child_type {
                     use self::hash::GenHash;
@@ -2091,19 +2088,13 @@ impl CGenerator {
                 ref on_true,
                 ref on_false,
             } => {
-                // for C
-                context.body.add("#error Select is not implemented yet");
-
-                // for LLVM
-                /*
-                let output_pointer = context.get_value(output)?;
-                let cond = self.load(context.builder, context.get_value(cond)?)?;
-                let cond = self.bool_to_i1(context.builder, cond);
-                let on_true = self.load(context.builder, context.get_value(on_true)?)?;
-                let on_false = self.load(context.builder, context.get_value(on_false)?)?;
-                let result = LLVMBuildSelect(context.builder, cond, on_true, on_false, c_str!(""));
-                LLVMBuildStore(context.builder, result, output_pointer);
-                */
+                context.body.add(format!(
+                    "{} = {} ? {} : {};",
+                    context.c_get_value(output)?,
+                    context.c_get_value(cond)?,
+                    context.c_get_value(on_true)?,
+                    context.c_get_value(on_false)?,
+                ));
                 Ok(())
             }
             Serialize(_) => {
