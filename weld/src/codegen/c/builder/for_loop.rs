@@ -278,7 +278,14 @@ impl ForLoopGenInternal for CGenerator {
         // The loop's output is by definition derived from this builder.
         assert_eq!(builders.len(), 1);
         let weld_ty = &builders[0];
-        let is_no_resize = (func.blocks.len() == 1);  // VE-Weld NO_RESIZE
+
+        // VE-Weld NO_RESIZE
+        // This code uses the number of blocks to detect 'if' statement.
+        // Multiple blocks do notÇmean 'if' statement in general. But single block
+        // never means 'if' statement, so we use the number of blocks here. 
+        // FIXME: This code should be modified to detect whether the entire loop
+        // calculate ont-to-one mapping or not.
+        let is_no_resize = (func.blocks.len() == 1);
 
         // Create a context for the function.
         let context = &mut FunctionContext::new(self.context, program, func);
@@ -323,6 +330,7 @@ impl ForLoopGenInternal for CGenerator {
         let c_idx = context.c_get_value(&parfor.idx_arg)?;
 
         // VE-Weld NO_RESIZE begin
+        // FIXME: need to split following code into a function to avoid copy-and-paste.
         if is_no_resize {
             context.body.add(format!(
                 "if ( {}.capacity >= {} ) {{",

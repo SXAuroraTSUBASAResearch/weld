@@ -364,7 +364,6 @@ impl BuilderExpressionGen for CGenerator {
                 ctx.body.add(format!(
                     "{};",
                     methods.c_gen_merge(
-                        ctx.builder,
                         &mut self.intrinsics,
                         ctx.c_get_run(),
                         &c_builder_pointer,
@@ -374,18 +373,6 @@ impl BuilderExpressionGen for CGenerator {
                     )?,
                 ));
 
-                // for LLVM
-                /*
-                let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
-                let methods = self.appenders.get_mut(m.kind).unwrap();
-                let _ = methods.gen_merge(
-                    ctx.builder,
-                    &mut self.intrinsics,
-                    ctx.get_run(),
-                    builder_pointer,
-                    merge_value,
-                )?;
-                */
                 Ok(())
             }
             DictMerger(ref key, ref val, ref binop) => {

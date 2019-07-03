@@ -687,6 +687,22 @@ pub trait CodeGenExt {
         )
     }
 
+    unsafe fn c_define_function<T: AsRef<str>>(
+        &mut self,
+        c_ret_ty: &str,
+        c_arg_tys: &[String],
+        name: T,
+        inline: bool,
+    ) -> CodeBuilder {
+        self.c_define_function_with_visibility(
+            c_ret_ty,
+            c_arg_tys,
+            &"static",
+            name,
+            inline,
+        )
+    }
+
     /// Generates code to define a function with the given return type and argument type.
     ///
     /// Returns a reference to the function, a builder used to build the function body, and the
@@ -737,6 +753,34 @@ pub trait CodeGenExt {
         LLVMPositionBuilderAtEnd(builder, block);
         LLVMSetLinkage(function, visibility);
         (function, builder, block, code)
+    }
+
+    unsafe fn c_define_function_with_visibility<T: AsRef<str>>(
+        &mut self,
+        c_ret_ty: &str,
+        c_arg_tys: &[String],
+        visibility: &str,
+        name: T,
+        inline: bool,
+    ) -> CodeBuilder {
+        // for C
+        let mut code = CodeBuilder::new();
+        let args_line = self.c_define_args(&c_arg_tys);
+        code.add(format!(
+            "{st} {inl} {ret_ty} {fun}({args})",
+            st=visibility,
+            inl={
+                if inline {
+                    "inline"
+                } else {
+                    ""
+                }
+            },
+            ret_ty=c_ret_ty,
+            fun=name.as_ref(),
+            args=args_line,
+        ));
+        code
     }
 
     /// Converts a `LiteralKind` into a constant LLVM scalar literal value.
