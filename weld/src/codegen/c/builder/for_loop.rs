@@ -7,24 +7,13 @@
 //! The `GenForLoopInternal` is the main workhorse of this module, and provides methods for
 //! building a loop, creating bounds checks, loading elements, and so forth.
 
-use llvm_sys;
-
-use std::ffi::CString;
-
 use crate::ast::IterKind::*;
 use crate::ast::*;
 use crate::error::*;
 use crate::runtime::WeldRuntimeErrno;
 use crate::sir::*;
 
-use self::llvm_sys::core::*;
-use self::llvm_sys::prelude::*;
-use self::llvm_sys::{LLVMIntPredicate, LLVMLinkage};
-
-use crate::codegen::c::llvm_exts::LLVMExtAttribute::*;
-use crate::codegen::c::llvm_exts::*;
 use crate::codegen::c::vector::VectorExt;
-use crate::codegen::c::{LLVM_VECTOR_WIDTH, SIR_FUNC_CALL_CONV};
 
 use super::{CodeGenExt, FunctionContext, CGenerator};
 

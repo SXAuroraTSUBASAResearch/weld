@@ -13,11 +13,8 @@ use crate::ast::*;
 use crate::error::*;
 use crate::sir::*;
 
-use std::ffi::CString;
-
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
-use self::llvm_sys::LLVMIntPredicate::*;
 
 use crate::codegen::c::intrinsic::Intrinsics;
 
@@ -452,7 +449,6 @@ impl NumericExpressionGen for CGenerator {
             let ty = ctx.sir_function.symbol_type(left)?;
             match *ty {
                 Scalar(_) | Simd(_) => {
-                    // for C
                     let c_left = ctx.c_get_value(left)?;
                     let c_right = ctx.c_get_value(right)?;
                     let result = match op {
@@ -465,23 +461,6 @@ impl NumericExpressionGen for CGenerator {
                         output,
                         result,
                     ));
-
-                    // for LLVM
-                    /*
-                    let llvm_left = self.load(ctx.builder, ctx.get_value(left)?)?;
-                    let llvm_right = self.load(ctx.builder, ctx.get_value(right)?)?;
-                    let result = match op {
-                        BinOpKind::Pow => self.gen_pow(ctx, llvm_left, llvm_right, ty)?,
-                        _ => gen_binop(ctx.builder, op, llvm_left, llvm_right, ty)?,
-                    };
-
-                    // Extend the returned `i1` to the `i8` boolean type.
-                    if op.is_comparison() {
-                        self.i1_to_bool(ctx.builder, result)
-                    } else {
-                        result
-                    }
-                    */
                 }
                 Vector(_) | Struct(_) if op.is_comparison() => {
                     // for C
@@ -586,7 +565,6 @@ impl NumericExpressionGen for CGenerator {
         if let AssignLiteral(ref value) = statement.kind {
             let output = statement.output.as_ref().unwrap();
             let output_type = ctx.sir_function.symbol_type(output)?;
-            // for C
             let mut result = if let LiteralKind::StringLiteral(ref val) = value {
                 val.to_string()
             } else {
@@ -622,7 +600,6 @@ impl NumericExpressionGen for CGenerator {
         let output = &statement.output.clone().unwrap();
         let output_type = ctx.sir_function.symbol_type(output)?;
         if let Cast(ref child, _) = statement.kind {
-            // for C
             let c_output_pointer = ctx.c_get_value(output)?;
             ctx.body.add(format!(
                 "{} = ({}){};",
@@ -630,97 +607,11 @@ impl NumericExpressionGen for CGenerator {
                 &self.c_type(output_type)?,
                 ctx.c_get_value(child)?,
             ));
-            // for LLVM
-            /*
-            let child_type = ctx.sir_function.symbol_type(child)?;
-            let child_value = self.load(ctx.builder, ctx.get_value(child)?)?;
-            let output_pointer = ctx.get_value(output)?;
-            let result = gen_cast(
-                ctx.builder,
-                child_value,
-                child_type,
-                output_type,
-                self.llvm_type(output_type)?,
-            )?;
-            let _ = LLVMBuildStore(ctx.builder, result, output_pointer);
-            */
             Ok(())
         } else {
             unreachable!()
         }
     }
-}
-
-/// Workhorse for generating casts.
-pub unsafe fn gen_cast(
-    builder: LLVMBuilderRef,
-    value: LLVMValueRef,
-    from: &Type,
-    to: &Type,
-    to_ll: LLVMTypeRef,
-) -> WeldResult<LLVMValueRef> {
-    use crate::ast::ScalarKind::*;
-    use crate::ast::Type::Scalar;
-    let result = match (from, to) {
-        (&Scalar(s1), &Scalar(s2)) => {
-            match (s1, s2) {
-                // Floating point extension and truncation.
-                (F32, F64) => LLVMBuildFPExt(builder, value, to_ll, c_str!("")),
-                (F64, F32) => LLVMBuildFPTrunc(builder, value, to_ll, c_str!("")),
-
-                // Floating point to signed integer
-                (_, _) if s1.is_float() && s2.is_signed_integer() => {
-                    LLVMBuildFPToSI(builder, value, to_ll, c_str!(""))
-                }
-
-                // Floating point to unsigned integer
-                (_, _) if s1.is_float() && s2.is_unsigned_integer() => {
-                    LLVMBuildFPToUI(builder, value, to_ll, c_str!(""))
-                }
-
-                // Signed integer to floating point
-                (_, _) if s1.is_signed_integer() && s2.is_float() => {
-                    LLVMBuildSIToFP(builder, value, to_ll, c_str!(""))
-                }
-
-                // Unsigned integer to floating point
-                (_, _) if s1.is_unsigned_integer() && s2.is_float() => {
-                    LLVMBuildUIToFP(builder, value, to_ll, c_str!(""))
-                }
-
-                // Boolean to other integers. Since booleans are i8s, we either zero-extend them if
-                // the target type is larger, or simply return the same type otherwise.
-                (Bool, _) if s2.is_integer() && s2.bits() > 8 => {
-                    LLVMBuildZExt(builder, value, to_ll, c_str!(""))
-                }
-                (Bool, _) if s2.is_integer() => value,
-
-                // Zero-extension.
-                (_, _) if s1.is_unsigned_integer() && s2.bits() > s1.bits() => {
-                    LLVMBuildZExt(builder, value, to_ll, c_str!(""))
-                }
-
-                // Sign-extension.
-                (_, _) if s1.is_signed_integer() && s2.bits() > s1.bits() => {
-                    LLVMBuildSExt(builder, value, to_ll, c_str!(""))
-                }
-
-                // Truncation
-                (_, _) if s2.bits() < s1.bits() => {
-                    LLVMBuildTrunc(builder, value, to_ll, c_str!(""))
-                }
-
-                // Bitcast
-                (_, _) if s2.bits() == s1.bits() => {
-                    LLVMBuildBitCast(builder, value, to_ll, c_str!(""))
-                }
-
-                _ => return compile_err!("Cannot cast {} to {}", from, to),
-            }
-        }
-        _ => return compile_err!("Cannot cast {} to {}", from, to),
-    };
-    Ok(result)
 }
 
 /// Generates a binary op instruction without intrinsics.

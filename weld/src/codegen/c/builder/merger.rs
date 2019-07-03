@@ -8,15 +8,12 @@ use code_builder::CodeBuilder;
 use crate::ast::BinOpKind;
 use crate::ast::ScalarKind;
 use crate::ast::Type;
-use crate::ast::Type::{Scalar, Simd};
+use crate::ast::Type::Scalar;
 use crate::error::*;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
-use self::llvm_sys::LLVMTypeKind;
 
-use crate::codegen::c::llvm_exts::*;
-use crate::codegen::c::numeric::gen_binop;
 use crate::codegen::c::numeric::c_gen_binop;
 use crate::codegen::c::CodeGenExt;
 use crate::codegen::c::LLVM_VECTOR_WIDTH;
@@ -29,20 +26,15 @@ const VECTOR_INDEX: u32 = 1;
 pub struct Merger {
     pub merger_ty: LLVMTypeRef,
     pub name: String,
-    pub elem_ty: LLVMTypeRef,
     pub c_elem_ty: String,
     pub scalar_kind: ScalarKind,
     pub op: BinOpKind,
     context: LLVMContextRef,
     module: LLVMModuleRef,
     ccontext: CContextRef,
-    new: Option<LLVMValueRef>,
     c_new: String,
-    merge: Option<LLVMValueRef>,
     c_merge: String,
-    vmerge: Option<LLVMValueRef>,
     c_vmerge: String,
-    result: Option<LLVMValueRef>,
     c_result: String,
 }
 
@@ -64,7 +56,6 @@ impl Merger {
     pub unsafe fn define<T: AsRef<str>>(
         name: T,
         op: BinOpKind,
-        elem_ty: LLVMTypeRef,
         c_elem_ty: &str,
         scalar_kind: ScalarKind,
         context: LLVMContextRef,
@@ -84,26 +75,19 @@ impl Merger {
         (*ccontext).prelude_code.add(def.result());
         // for LLVM
         let c_name = CString::new(name.as_ref()).unwrap();
-        let mut layout = [elem_ty, LLVMVectorType(elem_ty, LLVM_VECTOR_WIDTH)];
         let merger = LLVMStructCreateNamed(context, c_name.as_ptr());
-        LLVMStructSetBody(merger, layout.as_mut_ptr(), layout.len() as u32, 0);
         Merger {
-            name: c_name.into_string().unwrap(),
+            name: name.as_ref().to_string(),
             op,
             merger_ty: merger,
-            elem_ty,
             c_elem_ty: c_elem_ty.to_string(),
             scalar_kind,
             context,
             module,
             ccontext,
-            new: None,
             c_new: String::new(),
-            merge: None,
             c_merge: String::new(),
-            vmerge: None,
             c_vmerge: String::new(),
-            result: None,
             c_result: String::new(),
         }
     }
@@ -111,82 +95,40 @@ impl Merger {
     pub unsafe fn define_new(
         &mut self,
     ) -> WeldResult<()> {
-        if self.new.is_none() {
-            let ret_ty = self.merger_ty;
-            let c_ret_ty = &self.name.clone();
-            let mut arg_tys = [self.elem_ty];
-            let c_arg_tys = [self.c_elem_ty.clone()];
+        let c_ret_ty = &self.name.clone();
+        let c_arg_tys = [self.c_elem_ty.clone()];
 
-            // Use C name.
-            let name = format!("{}_new", self.name);
-            let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), false);
+        // Use C name.
+        let name = format!("{}_new", self.name);
+        let mut c_code = self.c_define_function(c_ret_ty, &c_arg_tys, name.clone(), false);
 
-            // for C
-            let c_identity = self.c_binop_identity(self.op, self.scalar_kind)?;
-            c_code.add("{");
-            c_code.add(format!("{} ret;", self.name));
-            // Initialize only scalar value using first parameter.
-            c_code.add(format!("ret.data = {};", self.c_get_param(0)));
-            // Initialize vector data using identity.
-            c_code.add(format!("\
-                for (int i = 0; i < {}; ++i) {{
-                    ret.vdata[i] = {};
-                }}",
-                LLVM_VECTOR_WIDTH,
-                c_identity,
-            ));
-            c_code.add("return ret;");
-            c_code.add("}");
+        // for C
+        let c_identity = self.c_binop_identity(self.op, self.scalar_kind)?;
+        c_code.add("{");
+        c_code.add(format!("{} ret;", self.name));
+        // Initialize only scalar value using first parameter.
+        c_code.add(format!("ret.data = {};", self.c_get_param(0)));
+        // Initialize vector data using identity.
+        c_code.add(format!("\
+            for (int i = 0; i < {}; ++i) {{
+                ret.vdata[i] = {};
+            }}",
+            LLVM_VECTOR_WIDTH,
+            c_identity,
+        ));
+        c_code.add("return ret;");
+        c_code.add("}");
 
-            (*self.ccontext()).prelude_code.add(c_code.result());
-            self.c_new = name;
-
-            // for LLVM
-            let identity = self.binop_identity(self.op, self.scalar_kind)?;
-            let mut vector_elems = [identity; LLVM_VECTOR_WIDTH as usize];
-            let vector_identity =
-                LLVMConstVector(vector_elems.as_mut_ptr(), vector_elems.len() as u32);
-            let one = LLVMBuildInsertValue(
-                builder,
-                LLVMGetUndef(self.merger_ty),
-                LLVMGetParam(function, 0),
-                SCALAR_INDEX,
-                c_str!(""),
-            );
-            let result =
-                LLVMBuildInsertValue(builder, one, vector_identity, VECTOR_INDEX, c_str!(""));
-
-            LLVMBuildRet(builder, result);
-
-            self.new = Some(function);
-            LLVMDisposeBuilder(builder);
-        }
+        (*self.ccontext()).prelude_code.add(c_code.result());
+        self.c_new = name;
         Ok(())
-    }
-    pub unsafe fn gen_new(
-        &mut self,
-        builder: LLVMBuilderRef,
-        init: LLVMValueRef,
-    ) -> WeldResult<LLVMValueRef> {
-        if self.new.is_none() {
-            self.define_new()?;
-        }
-
-        let mut args = [init];
-        Ok(LLVMBuildCall(
-            builder,
-            self.new.unwrap(),
-            args.as_mut_ptr(),
-            args.len() as u32,
-            c_str!(""),
-        ))
     }
     pub unsafe fn c_gen_new(
         &mut self,
         _builder: LLVMBuilderRef,
         init: &str,
     ) -> WeldResult<String> {
-        if self.new.is_none() {
+        if self.c_new.is_empty() {
             self.define_new()?;
         }
         Ok(format!("{}({})", self.c_new, init))
@@ -199,14 +141,12 @@ impl Merger {
     unsafe fn define_merge(
         &mut self,
         name: String,
-        arguments: &mut [LLVMTypeRef],
         c_arguments: &[String],
         gep_index: u32,
-    ) -> WeldResult<LLVMValueRef> {
+    ) -> WeldResult<()> {
         let vectorized = gep_index != SCALAR_INDEX;
-        let ret_ty = LLVMVoidTypeInContext(self.context);
         let c_ret_ty = &self.c_void_type();
-        let (function, fn_builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, arguments, c_arguments, name.clone(), true);
+        let mut c_code = self.c_define_function(c_ret_ty, c_arguments, name.clone(), true);
 
         // for C
         // Load the scalar element, apply the binary operator, and then store it back.
@@ -239,75 +179,12 @@ impl Merger {
         } else {
             self.c_vmerge = name;
         }
-
-        // for LLVM
-        LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
-
-        // Load the vector element, apply the binary operator, and then store it back.
-        let elem_pointer =
-            LLVMBuildStructGEP(fn_builder, LLVMGetParam(function, 0), gep_index, c_str!(""));
-        let elem = LLVMBuildLoad(fn_builder, elem_pointer, c_str!(""));
-        let result = gen_binop(
-            fn_builder,
-            self.op,
-            elem,
-            LLVMGetParam(function, 1),
-            &Simd(self.scalar_kind),
-        )?;
-        LLVMBuildStore(fn_builder, result, elem_pointer);
-        LLVMBuildRetVoid(fn_builder);
-        LLVMDisposeBuilder(fn_builder);
-        Ok(function)
+        Ok(())
     }
 
-    pub unsafe fn gen_merge(
-        &mut self,
-        llvm_builder: LLVMBuilderRef,
-        builder: LLVMValueRef,
-        value: LLVMValueRef,
-    ) -> WeldResult<LLVMValueRef> {
-        let vectorized = LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMTypeKind::LLVMVectorTypeKind;
-        if vectorized {
-            if self.vmerge.is_none() {
-                let mut arg_tys = [
-                    LLVMPointerType(self.merger_ty, 0),
-                    LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH as u32),
-                ];
-                let c_arg_tys = [
-                    self.c_pointer_type(&self.name),
-                    self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH as u32),
-                ];
-                let name = format!("{}_vmerge", self.name);
-                self.vmerge = Some(self.define_merge(name, &mut arg_tys, &c_arg_tys, VECTOR_INDEX)?);
-            }
-            let mut args = [builder, value];
-            Ok(LLVMBuildCall(
-                llvm_builder,
-                self.vmerge.unwrap(),
-                args.as_mut_ptr(),
-                args.len() as u32,
-                c_str!(""),
-            ))
-        } else {
-            if self.merge.is_none() {
-                let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), self.elem_ty];
-                let c_arg_tys = [self.c_pointer_type(&self.name), self.c_elem_ty.clone()];
-                let name = format!("{}_merge", self.name);
-                self.merge = Some(self.define_merge(name, &mut arg_tys, &c_arg_tys, SCALAR_INDEX)?);
-            }
-            let mut args = [builder, value];
-            Ok(LLVMBuildCall(
-                llvm_builder,
-                self.merge.unwrap(),
-                args.as_mut_ptr(),
-                args.len() as u32,
-                c_str!(""),
-            ))
-        }
-    }
     pub unsafe fn c_gen_merge(
         &mut self,
-        _llvm_builder: LLVMBuilderRef,
+        _builder: LLVMBuilderRef,
         builder: &str,
         value: &str,
         ty: &Type,
@@ -315,118 +192,62 @@ impl Merger {
         use crate::ast::Type::Simd;
         let vectorized = if let Simd(_) = ty { true } else { false };
         if vectorized {
-            if self.vmerge.is_none() {
-                let mut arg_tys = [
-                    LLVMPointerType(self.merger_ty, 0),
-                    LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH as u32),
-                ];
+            if self.c_vmerge.is_empty() {
                 let c_arg_tys = [
                     self.c_pointer_type(&self.name),
                     self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH as u32),
                 ];
                 let name = format!("{}_vmerge", self.name);
-                self.vmerge = Some(self.define_merge(name, &mut arg_tys, &c_arg_tys, VECTOR_INDEX)?);
+                self.define_merge(name, &c_arg_tys, VECTOR_INDEX)?;
             }
             Ok(format!("{}(&{}, {})", self.c_vmerge, builder, value))
         } else {
-            if self.merge.is_none() {
-                let mut arg_tys = [LLVMPointerType(self.merger_ty, 0), self.elem_ty];
+            if self.c_merge.is_empty() {
                 let c_arg_tys = [self.c_pointer_type(&self.name), self.c_elem_ty.clone()];
                 let name = format!("{}_merge", self.name);
-                self.merge = Some(self.define_merge(name, &mut arg_tys, &c_arg_tys, SCALAR_INDEX)?);
+                self.define_merge(name, &c_arg_tys, SCALAR_INDEX)?;
             }
             Ok(format!("{}(&{}, {})", self.c_merge, builder, value))
         }
     }
 
-
     pub unsafe fn define_result(
         &mut self,
     ) -> WeldResult<()> {
-        if self.result.is_none() {
-            let ret_ty = self.elem_ty;
-            let c_ret_ty = &self.c_elem_ty.clone();
-            let mut arg_tys = [LLVMPointerType(self.merger_ty, 0)];
-            let c_arg_tys = [self.c_pointer_type(&self.name)];
+        let c_ret_ty = &self.c_elem_ty.clone();
+        let c_arg_tys = [self.c_pointer_type(&self.name)];
 
-            // Use C name.
-            let name = format!("{}_result", self.name);
-            let (function, fn_builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), false);
+        // Use C name.
+        let name = format!("{}_result", self.name);
+        let mut c_code = self.c_define_function(c_ret_ty, &c_arg_tys, name.clone(), false);
 
-            // for C
-            // Load the scalar element, apply the binary operator, and then store it back.
-            c_code.add("{");
-            // let elem_size = self.size_of(self.elem_ty);
-            c_code.add(format!("{} ret = p0->data;", self.c_elem_ty));
-            c_code.add(format!("for (int i = 0; i < {}; ++i) {{",
-                LLVM_VECTOR_WIDTH));
-            let merge = c_gen_binop(
-                self.op,
-                "ret",
-                "p0->vdata[i]",
-                &Scalar(self.scalar_kind),
-            )?;
-            c_code.add(format!("ret = {};", merge));
-            c_code.add("}");
-            c_code.add("return ret;");
-            c_code.add("}");
+        // for C
+        // Load the scalar element, apply the binary operator, and then store it back.
+        c_code.add("{");
+        c_code.add(format!("{} ret = p0->data;", self.c_elem_ty));
+        c_code.add(format!("for (int i = 0; i < {}; ++i) {{",
+            LLVM_VECTOR_WIDTH));
+        let merge = c_gen_binop(
+            self.op,
+            "ret",
+            "p0->vdata[i]",
+            &Scalar(self.scalar_kind),
+        )?;
+        c_code.add(format!("ret = {};", merge));
+        c_code.add("}");
+        c_code.add("return ret;");
+        c_code.add("}");
 
-            (*self.ccontext()).prelude_code.add(c_code.result());
-            self.c_result = name;
-
-            // for LLVM
-            // Load the scalar element, apply the binary operator, and then store it back.
-            let builder_pointer = LLVMGetParam(function, 0);
-            let scalar_pointer =
-                LLVMBuildStructGEP(fn_builder, builder_pointer, SCALAR_INDEX, c_str!(""));
-            let mut result = LLVMBuildLoad(fn_builder, scalar_pointer, c_str!(""));
-
-            let vector_pointer =
-                LLVMBuildStructGEP(fn_builder, builder_pointer, VECTOR_INDEX, c_str!(""));
-            let vector = LLVMBuildLoad(fn_builder, vector_pointer, c_str!(""));
-
-            for i in 0..LLVM_VECTOR_WIDTH {
-                let vector_element =
-                    LLVMBuildExtractElement(fn_builder, vector, self.i32(i as i32), c_str!(""));
-                result = gen_binop(
-                    fn_builder,
-                    self.op,
-                    result,
-                    vector_element,
-                    &Scalar(self.scalar_kind),
-                )?;
-            }
-
-            LLVMBuildRet(fn_builder, result);
-
-            self.result = Some(function);
-            LLVMDisposeBuilder(fn_builder);
-        }
+        (*self.ccontext()).prelude_code.add(c_code.result());
+        self.c_result = name;
         Ok(())
-    }
-    pub unsafe fn gen_result(
-        &mut self,
-        llvm_builder: LLVMBuilderRef,
-        builder: LLVMValueRef,
-    ) -> WeldResult<LLVMValueRef> {
-        if self.result.is_none() {
-            self.define_result()?;
-        }
-        let mut args = [builder];
-        Ok(LLVMBuildCall(
-            llvm_builder,
-            self.result.unwrap(),
-            args.as_mut_ptr(),
-            args.len() as u32,
-            c_str!(""),
-        ))
     }
     pub unsafe fn c_gen_result(
         &mut self,
-        _llvm_builder: LLVMBuilderRef,
+        _builder: LLVMBuilderRef,
         builder: &str,
     ) -> WeldResult<String> {
-        if self.result.is_none() {
+        if self.c_result.is_empty() {
             self.define_result()?;
         }
         Ok(format!("{}(&{})", self.c_result, builder))

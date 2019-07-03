@@ -23,11 +23,11 @@ use crate::sir::*;
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
 
-use super::dict;
+// use super::dict;
 
 use super::{CodeGenExt, FunctionContext, CGenerator};
 
-use super::hash;
+// use super::hash;
 use super::numeric;
 
 mod for_loop;
@@ -359,7 +359,6 @@ impl BuilderExpressionGen for CGenerator {
         let c_builder_pointer = ctx.c_get_value(m.builder)?;
         match *m.kind {
             Appender(ref ty) => {
-                // for C
                 let methods = self.appenders.get_mut(m.kind).unwrap();
                 ctx.body.add(format!(
                     "{};",
@@ -381,10 +380,10 @@ impl BuilderExpressionGen for CGenerator {
                     "#error Merge for DictMerger is not implemented yet");
 
                 // for LLVM
+                /*
                 use self::hash::*;
                 use crate::ast::Type::Scalar;
 
-                /*
                 // Build the default value that we upsert if the key is not present in the
                 // dictionary yet.
                 let default = match *val.as_ref() {
@@ -462,9 +461,9 @@ impl BuilderExpressionGen for CGenerator {
                     "#error Merge for GroupMerger is not implemented yet");
 
                 // for LLVM
+                /*
                 use self::dict::GroupingDict;
                 use self::hash::*;
-                /*
                 // The merge value is a {K, V} struct.
                 let merge_value_ptr = ctx.get_value(m.value)?;
                 let key_pointer = LLVMBuildStructGEP(ctx.builder, merge_value_ptr, 0, c_str!(""));
@@ -491,7 +490,6 @@ impl BuilderExpressionGen for CGenerator {
                 Ok(())
             }
             Merger(ref ty, _) => {
-                // for C
                 let c_merge_value = ctx.c_get_value(m.value)?;
                 let methods = self.mergers.get_mut(m.kind).unwrap();
                 let merge = methods.c_gen_merge(ctx.builder, &c_builder_pointer, &c_merge_value, ty)?;
@@ -499,13 +497,6 @@ impl BuilderExpressionGen for CGenerator {
                     "{};",
                     merge,
                 ));
-
-                // for LLVM
-                /*
-                let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
-                let methods = self.mergers.get_mut(m.kind).unwrap();
-                let _ = methods.gen_merge(ctx.builder, builder_pointer, merge_value)?;
-                */
                 Ok(())
             }
             VecMerger(ref elem, ref binop) => {
@@ -514,8 +505,8 @@ impl BuilderExpressionGen for CGenerator {
                     "#error Merge for VecMerger is not implemented yet");
 
                 // for LLVM
-                use super::vector::VectorExt;
                 /*
+                use super::vector::VectorExt;
                 // The type of the merge value is {index, value} so use GEP to extract
                 // the key and the key pointer.
                 let merge_type = ctx.sir_function.symbol_type(m.value)?;
@@ -565,12 +556,11 @@ impl BuilderExpressionGen for CGenerator {
         match *m.kind {
             Appender(ref elem_type) => {
                 let vector = &Vector(elem_type.clone());
-                let vector_type = self.llvm_type(vector)?;
                 let c_vector_type = &self.c_type(vector)?.to_string();
                 // for C
                 let result = {
                     let methods = self.appenders.get_mut(m.kind).unwrap();
-                    methods.c_gen_result(ctx.builder, vector_type, c_vector_type, &c_builder_pointer)?
+                    methods.c_gen_result(ctx.builder, c_vector_type, &c_builder_pointer)?
                 };
                 ctx.body.add(format!(
                     "{} = {};",
@@ -692,12 +682,10 @@ impl BuilderExpressionGen for CGenerator {
                         } else {
                             unreachable!()
                         };
-                        let llvm_elem_type = self.llvm_type(elem_type)?;
                         let c_elem_type = &self.c_type(elem_type)?.to_string();
                         let merger = merger::Merger::define(
                             "merger",
                             *binop,
-                            llvm_elem_type,
                             c_elem_type,
                             scalar_kind,
                             self.context,
@@ -757,11 +745,9 @@ impl BuilderExpressionGen for CGenerator {
                         let name = format!("merger{}", self.merger_index);
                         self.merger_index += 1;
                         let c_elem_type = &self.c_type(elem_type)?.to_string();
-                        let llvm_elem_type = self.llvm_type(elem_type)?;
                         let merger = merger::Merger::define(
                             name,
                             *binop,
-                            llvm_elem_type,
                             c_elem_type,
                             scalar_kind,
                             self.context,

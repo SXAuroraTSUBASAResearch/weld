@@ -9,17 +9,14 @@ use llvm_sys;
 
 use libc;
 
-use libc::{c_char, c_uint};
+use libc::{c_char};
 
 use std::ffi::{CStr, CString};
 use std::fmt;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::prelude::*;
-use self::llvm_sys::transforms::pass_manager_builder::LLVMPassManagerBuilderRef;
 use self::llvm_sys::{LLVMAttributeFunctionIndex, LLVMAttributeReturnIndex};
-
-use self::llvm_sys::target_machine::LLVMTargetMachineRef;
 
 // Preload the target-specific features.
 lazy_static! {

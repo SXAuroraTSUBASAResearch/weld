@@ -6,7 +6,7 @@ use libc;
 use llvm_sys;
 use time;
 
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::mem;
 use std::ptr;
 use std::sync::{Once, ONCE_INIT};
@@ -57,55 +57,6 @@ pub struct CompiledModule {
 // LLVM modules are thread-safe.
 unsafe impl Send for CompiledModule {}
 unsafe impl Sync for CompiledModule {}
-
-impl CompiledModule {
-    /// Dumps assembly for this module.
-    pub fn asm(&self) -> WeldResult<String> {
-        unsafe {
-            /*
-            let mut output_buf = ptr::null_mut();
-            let mut err = ptr::null_mut();
-            let target = LLVMGetExecutionEngineTargetMachine(self.engine);
-            let file_type = LLVMCodeGenFileType::LLVMAssemblyFile;
-            let res = LLVMTargetMachineEmitToMemoryBuffer(
-                target,
-                self.module,
-                file_type,
-                &mut err,
-                &mut output_buf,
-            );
-            if res == 1 {
-                let err_str = CStr::from_ptr(err as *mut c_char)
-                    .to_string_lossy()
-                    .into_owned();
-                libc::free(err as *mut libc::c_void); // err is only allocated if res == 1
-                compile_err!("Machine code generation failed with error {}", err_str)
-            } else {
-                let start = LLVMGetBufferStart(output_buf);
-                let c_str = CStr::from_ptr(start as *mut c_char)
-                    .to_string_lossy()
-                    .into_owned();
-                LLVMDisposeMemoryBuffer(output_buf);
-                Ok(c_str)
-            }
-            */
-            Ok("no asm for C CogeGen".to_string())
-        }
-    }
-
-    /// Dumps the optimized LLVM IR for this module.
-    pub fn llvm(&self) -> WeldResult<String> {
-        unsafe {
-            let c_str = LLVMPrintModuleToString(self.module);
-            let ir = CStr::from_ptr(c_str)
-                .to_str()
-                .map_err(|e| WeldCompileError::new(e.to_string()))?;
-            let ir = ir.to_string();
-            LLVMDisposeMessage(c_str);
-            Ok(ir)
-        }
-    }
-}
 
 impl Drop for CompiledModule {
     fn drop(&mut self) {
@@ -165,8 +116,8 @@ pub unsafe fn compile(
     ret_ty: Type,
     context: LLVMContextRef,
     module: LLVMModuleRef,
-    mappings: &[intrinsic::Mapping],
-    conf: &ParsedConf,
+    _mappings: &[intrinsic::Mapping],
+    _conf: &ParsedConf,
     stats: &mut CompilationStats,
 ) -> WeldResult<CompiledModule> {
 
@@ -218,14 +169,6 @@ pub unsafe fn compile(
     stats
         .llvm_times
         .push(("Module Verification".to_string(), start.to(end)));
-
-    let start = PreciseTime::now();
-    // Takes ownership of the module.
-    // let engine = create_exec_engine(module, mappings, conf)?;
-    let end = PreciseTime::now();
-    stats
-        .llvm_times
-        .push(("Create Exec Engine".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
     let end = PreciseTime::now();
@@ -333,55 +276,4 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
     };
     libc::free(error_str as *mut libc::c_void);
     result
-}
-
-/// Create an MCJIT execution engine for a given module.
-unsafe fn create_exec_engine(
-    module: LLVMModuleRef,
-    mappings: &[intrinsic::Mapping],
-    conf: &ParsedConf,
-) -> WeldResult<LLVMExecutionEngineRef> {
-    // Create a filtered list of globals. Needs to be done before creating the execution engine
-    // since we lose ownership of the module. (?)
-    let mut globals = vec![];
-    for mapping in mappings.iter() {
-        let global = LLVMGetNamedFunction(module, mapping.0.as_ptr());
-        // The LLVM optimizer can delete globals, so we need this check here!
-        if !global.is_null() {
-            globals.push((global, mapping.1));
-        } else {
-            trace!(
-                "Function {:?} was deleted from module by optimizer",
-                mapping.0
-            );
-        }
-    }
-
-    let mut engine = mem::uninitialized();
-    let mut error_str = mem::uninitialized();
-    let mut options: LLVMMCJITCompilerOptions = mem::uninitialized();
-    let options_size = mem::size_of::<LLVMMCJITCompilerOptions>();
-    LLVMInitializeMCJITCompilerOptions(&mut options, options_size);
-    options.OptLevel = conf.llvm.opt_level;
-    options.CodeModel = LLVMCodeModel::LLVMCodeModelDefault;
-
-    let result_code = LLVMCreateMCJITCompilerForModule(
-        &mut engine,
-        module,
-        &mut options,
-        options_size,
-        &mut error_str,
-    );
-
-    if result_code != 0 {
-        compile_err!(
-            "Creating execution engine failed: {}",
-            CStr::from_ptr(error_str).to_str().unwrap()
-        )
-    } else {
-        for global in globals {
-            LLVMAddGlobalMapping(engine, global.0, global.1);
-        }
-        Ok(engine)
-    }
 }

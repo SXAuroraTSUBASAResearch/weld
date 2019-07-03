@@ -1964,12 +1964,12 @@ impl CGenerator {
                     ));
                     Ok(())
                 } else if let Dict(ref key, _) = *child_type {
-                    use self::hash::GenHash;
                     // for C
                     context.body.add("#error Lookup is not implemented yet");
 
                     // for LLVM
                     /*
+                    use self::hash::GenHash;
                     let hash =
                         self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let result = {
@@ -2000,12 +2000,12 @@ impl CGenerator {
                 // let child_value = self.load(context.builder, context.get_value(child)?)?;
                 let child_type = context.sir_function.symbol_type(child)?;
                 if let Dict(ref key, _) = *child_type {
-                    use self::hash::GenHash;
                     // for C
                     context.body.add("#error OptLookup is not implemented yet");
 
                     // for LLVM
                     /*
+                    use self::hash::GenHash;
                     let hash =
                         self.gen_hash(key, context.builder, context.get_value(index)?, None)?;
                     let (filled, value) = {
@@ -2185,13 +2185,12 @@ impl CGenerator {
                     .symbol_type(statement.output.as_ref().unwrap())?;
 
                 if let Vector(ref elem_ty) = *output_type {
-                    use self::vector::VectorExt;
-
                     // for C
                     context.body.add("#error Sort is not implemented yet");
 
                     // for LLVM
                     /*
+                    use self::vector::VectorExt;
                     let child_value = self.load(context.builder, context.get_value(child)?)?;
 
                     // Sort clones the vector at the moment.
