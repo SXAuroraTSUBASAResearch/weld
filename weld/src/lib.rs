@@ -732,6 +732,10 @@ impl WeldModule {
 
         // Generate code.
         let compiled_module = codegen::compile_program(&sir_prog, conf, &mut stats)?;
+        use crate::util::env::get_weld_compilation_stats;
+        if get_weld_compilation_stats() {
+            println!("\n{}\n", stats.pretty_print());
+        }
         debug!("\n{}\n", stats.pretty_print());
 
         let (param_types, return_type) =
