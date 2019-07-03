@@ -104,7 +104,7 @@ impl RunStats {
     /// Returns pretty-printed statistics stored in `self`.
     pub fn pretty_print(&self) -> String {
         let mut result = String::new();
-        result.push_str("Weld Compiler:\n");
+        result.push_str("Weld Run:\n");
         let mut total = Duration::milliseconds(0);
         for &(ref name, ref dur) in self.run_times.iter() {
             result.push_str(&format!("\t{}: {:.3} ms\n", name, CompilationStats::format_time(dur)));
