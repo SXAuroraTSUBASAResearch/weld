@@ -256,15 +256,6 @@ impl Appender {
         vectorized: bool,
     ) -> WeldResult<()> {
         // Number of elements merged in at once.
-        /*let (merge_ty, c_merge_ty, num_elements) = if vectorized {
-            (
-                LLVMVectorType(self.elem_ty, LLVM_VECTOR_WIDTH),
-                self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH),
-                LLVM_VECTOR_WIDTH,
-            )
-        } else {
-            (self.elem_ty, self.c_elem_ty.clone(), 1)
-        };*/
         let (c_merge_ty, num_elements) = if vectorized {
             (
                 self.c_simd_type(&self.c_elem_ty, LLVM_VECTOR_WIDTH),
@@ -281,19 +272,12 @@ impl Appender {
             format!("{}_merge", self.name)
         };
 
-        /*let mut arg_tys = [
-            LLVMPointerType(self.appender_ty, 0),
-            merge_ty,
-            self.run_handle_type(),
-        ];*/
         let c_arg_tys = [
             self.c_pointer_type(&self.name),
             c_merge_ty,
             self.c_run_handle_type(),
         ];
-        //let ret_ty = LLVMVoidTypeInContext(self.context);
         let c_ret_ty = &self.c_void_type();
-        //let (function, builder, _, mut c_code) = self.define_function(ret_ty, c_ret_ty, &mut arg_tys, &c_arg_tys, name.clone(), true);
         let mut c_code = self.c_define_function(c_ret_ty, &c_arg_tys, name.clone(), true);
 
         // for C
@@ -346,85 +330,6 @@ impl Appender {
         } else {
             self.c_merge = name;
         }
-        // for LLVM
-        /*LLVMExtAddAttrsOnFunction(self.context, function, &[LLVMExtAttribute::AlwaysInline]);
-
-        let full_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("isFull"));
-        let finish_block = LLVMAppendBasicBlockInContext(self.context, function, c_str!("finish"));
-
-        // Builder is positioned at the entry block - attempt to merge in value.
-
-        let appender = LLVMGetParam(function, 0);
-        let merge_value = LLVMGetParam(function, 1);
-        let run_handle = LLVMGetParam(function, 2);
-
-        let size_slot = LLVMBuildStructGEP(builder, appender, SIZE_INDEX, c_str!(""));
-        let size = LLVMBuildLoad(builder, size_slot, c_str!("size"));
-
-        let capacity_slot = LLVMBuildStructGEP(builder, appender, CAPACITY_INDEX, c_str!(""));
-        let capacity = LLVMBuildLoad(builder, capacity_slot, c_str!("capacity"));
-
-        let new_size = LLVMBuildNSWAdd(
-            builder,
-            self.i64(i64::from(num_elements)),
-            size,
-            c_str!("newSize"),
-        );
-
-        let full = LLVMBuildICmp(builder, LLVMIntSGT, new_size, capacity, c_str!("full"));
-        LLVMBuildCondBr(builder, full, full_block, finish_block);
-
-        // Build the case where the appender is full and we need to alloate more memory.
-        LLVMPositionBuilderAtEnd(builder, full_block);
-        let new_capacity = LLVMBuildNSWMul(builder, capacity, self.i64(2), c_str!("newCapacity"));
-        let elem_size = self.size_of(self.elem_ty);
-        let alloc_size = LLVMBuildMul(builder, elem_size, new_capacity, c_str!("allocSize"));
-        let base_pointer = self.gen_index(builder, appender, None)?;
-        let raw_pointer = LLVMBuildBitCast(
-            builder,
-            base_pointer,
-            LLVMPointerType(self.i8_type(), 0),
-            c_str!("rawPtr"),
-        );
-        let bytes = intrinsics.call_weld_run_realloc(
-            builder,
-            run_handle,
-            raw_pointer,
-            alloc_size,
-            Some(c_str!("bytes")),
-        );
-        let typed_bytes =
-            LLVMBuildBitCast(builder, bytes, LLVMTypeOf(base_pointer), c_str!("typed"));
-        let pointer_slot = LLVMBuildStructGEP(builder, appender, POINTER_INDEX, c_str!(""));
-        LLVMBuildStore(builder, typed_bytes, pointer_slot);
-        LLVMBuildStore(builder, new_capacity, capacity_slot);
-        LLVMBuildBr(builder, finish_block);
-
-        // Build the finish block, which merges the value.
-        LLVMPositionBuilderAtEnd(builder, finish_block);
-
-        let mut merge_pointer = self.gen_index(builder, appender, Some(size))?;
-        if vectorized {
-            merge_pointer = LLVMBuildBitCast(
-                builder,
-                merge_pointer,
-                LLVMPointerType(merge_ty, 0),
-                c_str!(""),
-            );
-        }
-        let store_inst = LLVMBuildStore(builder, merge_value, merge_pointer);
-        if vectorized {
-            LLVMSetAlignment(store_inst, 1);
-        }
-        LLVMBuildStore(builder, new_size, size_slot);
-        LLVMBuildRetVoid(builder);
-
-        LLVMDisposeBuilder(builder);
-        if vectorized {
-            self.vmerge = Some(function);
-        } else {
-            self.merge = Some(function);
-        }*/
         Ok(())
     }
 
