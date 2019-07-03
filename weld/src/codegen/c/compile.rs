@@ -220,13 +220,6 @@ pub unsafe fn compile(
         .push(("Module Verification".to_string(), start.to(end)));
 
     let start = PreciseTime::now();
-    // optimize_module(module, conf)?;
-    let end = PreciseTime::now();
-    stats
-        .llvm_times
-        .push(("Module Optimization".to_string(), start.to(end)));
-
-    let start = PreciseTime::now();
     // Takes ownership of the module.
     // let engine = create_exec_engine(module, mappings, conf)?;
     let end = PreciseTime::now();
@@ -340,106 +333,6 @@ unsafe fn verify_module(module: LLVMModuleRef) -> WeldResult<()> {
     };
     libc::free(error_str as *mut libc::c_void);
     result
-}
-
-/// Optimize an LLVM module using a given LLVM optimization level.
-///
-/// This function is currently modeled after the `AddOptimizationPasses` in the LLVM `opt` tool:
-/// https://github.com/llvm-mirror/llvm/blob/master/tools/opt/opt.cpp
-unsafe fn optimize_module(module: LLVMModuleRef, conf: &ParsedConf) -> WeldResult<()> {
-    info!("Optimizing LLVM module");
-    use self::llvm_sys::transforms::pass_manager_builder::*;
-    let mpm = LLVMCreatePassManager();
-    let fpm = LLVMCreateFunctionPassManagerForModule(module);
-
-    // Target specific analyses so LLVM can query the backend.
-    let target_machine = target_machine()?;
-
-    let target = LLVMGetTargetMachineTarget(target_machine);
-
-    // Log some information about the machine...
-    let cpu_ptr = LLVMGetTargetMachineCPU(target_machine);
-    let cpu = CStr::from_ptr(cpu_ptr).to_str().unwrap();
-    let description = CStr::from_ptr(LLVMGetTargetDescription(target))
-        .to_str()
-        .unwrap();
-    let features_ptr = LLVMGetTargetMachineFeatureString(target_machine);
-    let features = CStr::from_ptr(features_ptr).to_str().unwrap();
-
-    debug!(
-        "CPU: {}, Description: {} Features: {}",
-        cpu, description, features
-    );
-    let start = PreciseTime::now();
-
-    if conf.llvm.target_analysis_passes {
-        LLVMExtAddTargetLibraryInfo(mpm);
-        LLVMAddAnalysisPasses(target_machine, mpm);
-        LLVMExtAddTargetPassConfig(target_machine, mpm);
-        LLVMAddAnalysisPasses(target_machine, fpm);
-    }
-
-    // Free memory
-    libc::free(cpu_ptr as *mut libc::c_void);
-    libc::free(features_ptr as *mut libc::c_void);
-
-    // TODO set the size and inliner threshold depending on the optimization level. Right now, we
-    // set the inliner to be as aggressive as the -O3 inliner in Clang.
-    let builder = LLVMPassManagerBuilderCreate();
-    LLVMPassManagerBuilderSetOptLevel(builder, conf.llvm.opt_level);
-    LLVMPassManagerBuilderSetSizeLevel(builder, 0);
-    LLVMPassManagerBuilderSetDisableUnrollLoops(
-        builder,
-        if conf.llvm.llvm_unroller { 0 } else { 1 },
-    );
-    LLVMExtPassManagerBuilderSetDisableVectorize(
-        builder,
-        if conf.llvm.llvm_vectorizer { 0 } else { 1 },
-    );
-    // 250 should correspond to OptLevel = 3
-    LLVMPassManagerBuilderUseInlinerWithThreshold(builder, 250);
-
-    if conf.llvm.func_optimizations {
-        LLVMPassManagerBuilderPopulateFunctionPassManager(builder, fpm);
-    }
-
-    if conf.llvm.module_optimizations {
-        LLVMPassManagerBuilderPopulateModulePassManager(builder, mpm);
-    }
-
-    LLVMPassManagerBuilderDispose(builder);
-    let end = PreciseTime::now();
-    debug!(
-        "LLVM Constructed PassManager in {} ms",
-        start.to(end).num_milliseconds()
-    );
-
-    let start = PreciseTime::now();
-    let mut func = LLVMGetFirstFunction(module);
-    while !func.is_null() {
-        LLVMRunFunctionPassManager(fpm, func);
-        func = LLVMGetNextFunction(func);
-    }
-    LLVMFinalizeFunctionPassManager(fpm);
-    let end = PreciseTime::now();
-    debug!(
-        "LLVM Function Passes Ran in {} ms",
-        start.to(end).num_milliseconds()
-    );
-
-    let start = PreciseTime::now();
-    LLVMRunPassManager(mpm, module);
-    let end = PreciseTime::now();
-    debug!(
-        "LLVM Module Passes Ran in {} ms",
-        start.to(end).num_milliseconds()
-    );
-
-    LLVMDisposePassManager(fpm);
-    LLVMDisposePassManager(mpm);
-    LLVMDisposeTargetMachine(target_machine);
-
-    Ok(())
 }
 
 /// Create an MCJIT execution engine for a given module.

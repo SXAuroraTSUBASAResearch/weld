@@ -159,7 +159,10 @@ pub fn LLVMExtAddDefaultAttrs(context: LLVMContextRef, function: LLVMValueRef) {
     }
 }
 
-#[link(name = "llvmext", kind = "static")]
+// The llvmext library is statically linked by
+// weld/src/codegen/llvm/llvm_exts.rs.  If we linked it here again,
+// it causes multiple defined error.
+// #[link(name = "llvmext", kind = "static")]
 extern "C" {
     #[no_mangle]
     pub fn LLVMExtGetProcessTriple() -> *const c_char;
@@ -167,14 +170,4 @@ extern "C" {
     pub fn LLVMExtGetHostCPUName() -> *const c_char;
     #[no_mangle]
     pub fn LLVMExtGetHostCPUFeatures() -> *const c_char;
-    #[no_mangle]
-    pub fn LLVMExtAddTargetLibraryInfo(manager: LLVMPassManagerRef);
-    #[no_mangle]
-    pub fn LLVMExtAddTargetPassConfig(target: LLVMTargetMachineRef, manager: LLVMPassManagerRef);
-    #[no_mangle]
-    pub fn LLVMExtPassManagerBuilderSetDisableVectorize(
-        builder: LLVMPassManagerBuilderRef,
-        disabled: c_uint,
-    );
-
 }
