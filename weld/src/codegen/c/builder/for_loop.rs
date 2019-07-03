@@ -59,6 +59,13 @@ pub trait ForLoopGenInternal {
         func: &SirFunction,
         parfor: &ParallelForData,
     ) -> WeldResult<()>;
+    unsafe fn gen_loop_body_function_internal(
+        &mut self,
+        program: &SirProgram,
+        func: &SirFunction,
+        parfor: &ParallelForData,
+        without_resize: bool,
+    ) -> WeldResult<()>;
     /// Generates a bounds check for the given iterator.
     ///
     /// Returns a value representing the number of iterations the iterator will produce.
@@ -260,6 +267,111 @@ impl ForLoopGenInternal for CGenerator {
     ///     br loop.entry
     /// loop.exit:
     ///     return { builders }
+    unsafe fn gen_loop_body_function_internal(
+        &mut self,
+        program: &SirProgram,
+        func: &SirFunction,
+        parfor: &ParallelForData,
+        without_resize: bool,
+    ) -> WeldResult<()> {
+        // Construct the return type, which is the builder passed into the function.
+        let builders: Vec<Type> = func
+            .params
+            .values()
+            .filter(|v| v.is_builder())
+            .cloned()
+            .collect();
+
+        // Each loop provides a single builder expression (which could be a struct of builders).
+        // The loop's output is by definition derived from this builder.
+        assert_eq!(builders.len(), 1);
+        let weld_ty = &builders[0];
+
+        // Create a context for the function.
+        let context = &mut FunctionContext::new(self.context, program, func);
+
+        // Generate function definition.
+        // for C
+        let mut c_arg_tys = self.c_argument_types(func)?;
+        // The second-to-last argument is the *total* number of iterations across all threads (in a
+        // multi-threaded setting) that this loop will execute for.
+        c_arg_tys.push(self.c_i64_type());
+        let c_num_iterations_index = c_arg_tys.len() - 1;
+        // Last argument is run handle, as always.
+        c_arg_tys.push(self.c_run_handle_type());
+
+        // We always inline this since it will appear only once in the
+        // program, so there's no code size cost to doing it.
+        let c_ret_ty = &self.c_type(weld_ty)?;
+        let name = format!("f{}_loop", func.id);
+        let args_line = self.c_define_args(&c_arg_tys);
+        context.body.add(format!(
+            "{} {} {}_{}({})",
+            "static inline",            // add inline like what LLVM specifies
+            c_ret_ty,
+            name,
+            if without_resize { "no_resize" } else { "resize" },
+            args_line,
+        ));
+        self.c_functions.insert(func.id, name);
+        context.body.add("{");
+        // Reference to the parameter storing the max number of iterations.
+        let c_max = self.c_get_param(c_num_iterations_index);
+        // Create the entry basic block, where we define alloca'd variables.
+        self.gen_allocas(context)?;
+        self.gen_store_parameters(context)?;
+
+        // Store the loop induction variable and the builder argument.
+        // for C
+        context.body.add(format!(
+            "{} = {};",
+            context.c_get_value(&parfor.builder_arg)?,
+            context.c_get_value(&parfor.builder)?,
+        ));
+        let c_idx = context.c_get_value(&parfor.idx_arg)?;
+        context.body.add(format!(
+            "for ({} = 0; {} != {}; ++{}) {{",
+            c_idx,
+            c_idx,
+            c_max,
+            c_idx,
+        ));
+        // Add the SIR function basic blocks.
+        self.gen_basic_block_defs(context)?;
+
+        // Load the loop element.
+        let c_i = &context.c_get_value(&parfor.idx_arg)?;
+        let c_e = &context.c_get_value(&parfor.data_arg)?;
+        self.gen_loop_element(context, c_i, c_e, parfor)?;
+
+        // Generate the body - this resembles the usual SIR function generation, but we pass a
+        // basic block ID to gen_terminator to change the `EndFunction` terminators to a basic
+        // block jump to the end of the loop.
+        for bb in func.blocks.iter() {
+            // for C
+            context.body.add(format!(
+                "{}:",
+                context.c_get_block(bb.id)?,
+            ));
+            for statement in bb.statements.iter() {
+                self.gen_statement(context, statement, without_resize)?;
+            }
+            let loop_terminator = context.c_get_value(&parfor.builder_arg)?;
+            self.gen_terminator(context, &bb, Some(loop_terminator))?;
+        }
+
+        // Loop body end
+        context.body.add("}");
+
+        context.body.add(format!(
+            "return {};",
+            context.c_get_value(&parfor.builder_arg)?,
+        ));
+
+        context.body.add("}");
+        (*self.ccontext()).prelude_code.add(context.body.result());
+        Ok(())
+    }
     unsafe fn gen_loop_body_function(
         &mut self,
         program: &SirProgram,
@@ -312,114 +424,74 @@ impl ForLoopGenInternal for CGenerator {
             name,
             args_line,
         ));
-        self.c_functions.insert(func.id, name);
+        self.c_functions.insert(func.id, name.clone());
         context.body.add("{");
         // Reference to the parameter storing the max number of iterations.
         let c_max = self.c_get_param(c_num_iterations_index);
-        // Create the entry basic block, where we define alloca'd variables.
-        self.gen_allocas(context)?;
-        self.gen_store_parameters(context)?;
 
-        // Store the loop induction variable and the builder argument.
-        // for C
-        context.body.add(format!(
-            "{} = {};",
-            context.c_get_value(&parfor.builder_arg)?,
-            context.c_get_value(&parfor.builder)?,
-        ));
-        let c_idx = context.c_get_value(&parfor.idx_arg)?;
+        // Find parameter reprensents parfor.builder
+        let mut builder_index = func.params.len() + 1;
+        for (i, (symbol, _)) in func.params.iter().enumerate() {
+            if symbol == &parfor.builder {
+                builder_index = i;
+            }
+        }
+        assert!(builder_index <= func.params.len());
+
+        // We create two body functions here.  One is for one-to-one mapping.
+        // The other is for not one-to-one mapping.  Former may be vectorized
+        // because it doesn't call realloc.  Latter is not vectorized because
+        // it calls realloc.
+
+        // The parameters of the body function are:
+        //   0..N: each parameter in func.params
+        //   N+1:  loop max
+        //   N+2:  run handler
+        let mut c_arguments = vec![];
+        for i in 0..func.params.len() + 1 {
+            c_arguments.push(self.c_get_param(i));
+        }
+        // Last argument is always the run handle.
+        c_arguments.push(context.c_get_run().to_string());
+
+        // Prepare to call the body function.
+        let args_line = self.c_call_args(&c_arguments);
 
         // VE-Weld NO_RESIZE begin
-        // FIXME: need to split following code into a function to avoid copy-and-paste.
         if is_no_resize {
+            self.gen_loop_body_function_internal(
+                context.sir_program, func, parfor, true)?;
+            self.gen_loop_body_function_internal(
+                context.sir_program, func, parfor, false)?;
+
             context.body.add(format!(
                 "if ( {}.capacity >= {} ) {{",
-                context.c_get_value(&parfor.builder_arg)?,
+                self.c_get_param(builder_index),
                 c_max,
             ));
 
             context.body.add(format!(
-                "for ({} = 0; {} != {}; ++{}) {{",
-                c_idx,
-                c_idx,
-                c_max,
-                c_idx,
+                "return {}_no_resize({});",
+                name,
+                args_line,
             ));
-
-            // Add the SIR function basic blocks.
-            self.gen_basic_block_defs(context)?;
-
-            // Load the loop element.
-            let c_i = &context.c_get_value(&parfor.idx_arg)?;
-            let c_e = &context.c_get_value(&parfor.data_arg)?;
-            self.gen_loop_element(context, c_i, c_e, parfor)?;
-
-            // Generate the body - this resembles the usual SIR function generation, but we pass a
-            // basic block ID to gen_terminator to change the `EndFunction` terminators to a basic
-            // block jump to the end of the loop.
-            for bb in func.blocks.iter() {
-                // for C
-                /*
-                context.body.add(format!(
-                    "{}:",
-                    context.c_get_block(bb.id)?,
-                ));
-                */
-                for statement in bb.statements.iter() {
-                    self.gen_statement(context, statement, is_no_resize)?;
-                }
-                let loop_terminator = context.c_get_value(&parfor.builder_arg)?;
-                self.gen_terminator(context, &bb, Some(loop_terminator))?;
-            }
-
-            // Loop body end
-            context.body.add("}");
-
             context.body.add("} else {");
-        }
-        // VE-Weld NO_RESIZE end
-
-        context.body.add(format!(
-            "for ({} = 0; {} != {}; ++{}) {{",
-            c_idx,
-            c_idx,
-            c_max,
-            c_idx,
-        ));
-        // Add the SIR function basic blocks.
-        self.gen_basic_block_defs(context)?;
-
-        // Load the loop element.
-        let c_i = &context.c_get_value(&parfor.idx_arg)?;
-        let c_e = &context.c_get_value(&parfor.data_arg)?;
-        self.gen_loop_element(context, c_i, c_e, parfor)?;
-
-        // Generate the body - this resembles the usual SIR function generation, but we pass a
-        // basic block ID to gen_terminator to change the `EndFunction` terminators to a basic
-        // block jump to the end of the loop.
-        for bb in func.blocks.iter() {
-            // for C
             context.body.add(format!(
-                "{}:",
-                context.c_get_block(bb.id)?,
+                "return {}_resize({});",
+                name,
+                args_line,
             ));
-            for statement in bb.statements.iter() {
-                self.gen_statement(context, statement, false)?;    // VE-Weld NO_RESIZE
-            }
-            let loop_terminator = context.c_get_value(&parfor.builder_arg)?;
-            self.gen_terminator(context, &bb, Some(loop_terminator))?;
+            context.body.add("}");
+        } else {
+            self.gen_loop_body_function_internal(
+                context.sir_program, func, parfor, false)?;
+
+            context.body.add(format!(
+                "return {}_resize({});",
+                name,
+                args_line,
+            ));
         }
-
-        // Loop body end
-        context.body.add("}");
-
-        if is_no_resize { context.body.add("}"); } // VE-Weld NO_RESIZE
-
-        context.body.add(format!(
-            "return {};",
-            context.c_get_value(&parfor.builder_arg)?,
-        ));
-
         context.body.add("}");
         (*self.ccontext()).prelude_code.add(context.body.result());
         Ok(())
