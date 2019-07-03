@@ -3,7 +3,7 @@
 use std::ptr;
 use std::os::raw::c_char;
 use std::ffi::CString;
-use libc::{uint64_t, int64_t, uint32_t, int32_t, c_int, c_void};
+use libc::{c_int, c_void};
 
 use crate::WeldResult;
 use crate::util::offload_ve::*;
@@ -12,11 +12,11 @@ pub enum VeoProcHandle {}
 pub enum VeoThrContext {}
 pub enum VeoArgs {}
 pub type VeoProcHandleRef = *mut VeoProcHandle;
-pub type VeoHandle = uint64_t;
+pub type VeoHandle = u64;
 pub type VeoThrContextRef = *mut VeoThrContext;
 pub type VeoArgsRef = *mut VeoArgs;
-pub type SymHandle = uint64_t;
-pub type CallHandle = uint64_t;
+pub type SymHandle = u64;
+pub type CallHandle = u64;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -38,8 +38,8 @@ pub enum VeoCommandState {
 
 #[link(name = "veo")]
 extern "C" {
-    pub fn veo_proc_create(Val: int64_t) -> VeoProcHandleRef;
-    pub fn veo_proc_create_static(Val: int64_t, VeoBin: *const c_char) -> VeoProcHandleRef;
+    pub fn veo_proc_create(Val: i64) -> VeoProcHandleRef;
+    pub fn veo_proc_create_static(Val: i64, VeoBin: *const c_char) -> VeoProcHandleRef;
     pub fn veo_proc_destroy(PH: VeoProcHandleRef) -> c_int;
     pub fn veo_load_library(PH: VeoProcHandleRef, LibName: *const c_char)
                             -> VeoHandle;
@@ -52,16 +52,16 @@ extern "C" {
     pub fn veo_args_alloc() -> VeoArgsRef;
     pub fn veo_args_clear(Args: VeoArgsRef);
     pub fn veo_args_free(Args: VeoArgsRef);
-    pub fn veo_args_set_i64(Args: VeoArgsRef, Index: c_int, Val: int64_t)
+    pub fn veo_args_set_i64(Args: VeoArgsRef, Index: c_int, Val: i64)
                             -> c_int;
-    pub fn veo_args_set_u64(Args: VeoArgsRef, Index: c_int, Val: uint64_t)
+    pub fn veo_args_set_u64(Args: VeoArgsRef, Index: c_int, Val: u64)
                             -> c_int;
-    pub fn veo_args_set_i32(Args: VeoArgsRef, Index: c_int, Val: int32_t)
+    pub fn veo_args_set_i32(Args: VeoArgsRef, Index: c_int, Val: i32)
                             -> c_int;
-    pub fn veo_args_set_u32(Args: VeoArgsRef, Index: c_int, Val: uint32_t)
+    pub fn veo_args_set_u32(Args: VeoArgsRef, Index: c_int, Val: u32)
                             -> c_int;
     pub fn veo_args_set_stack(Args: VeoArgsRef, Intent: VeoArgsIntent,
-                              Index: c_int, Data: *mut c_char, Len: uint64_t)
+                              Index: c_int, Data: *mut c_char, Len: u64)
                               -> c_int;
     pub fn veo_call_async(Ctx: VeoThrContextRef,
                           Sym: SymHandle,
@@ -74,19 +74,19 @@ extern "C" {
                                   -> CallHandle;
     pub fn veo_call_wait_result(Ctx: VeoThrContextRef,
                                 Id: CallHandle,
-                                RetVal: *mut uint64_t)
+                                RetVal: *mut u64)
                                 -> VeoCommandState;
-    pub fn veo_alloc_mem(PH: VeoProcHandleRef, Addr: *mut uint64_t,
+    pub fn veo_alloc_mem(PH: VeoProcHandleRef, Addr: *mut u64,
                          Size: usize) -> c_int;
-    pub fn veo_free_mem(PH: VeoProcHandleRef, Addr: uint64_t) -> c_int;
+    pub fn veo_free_mem(PH: VeoProcHandleRef, Addr: u64) -> c_int;
     pub fn veo_read_mem(PH: VeoProcHandleRef, Data: *mut c_void,
-                        Addr: uint64_t, Size: usize) -> c_int;
-    pub fn veo_write_mem(PH: VeoProcHandleRef, Addr: uint64_t,
+                        Addr: u64, Size: usize) -> c_int;
+    pub fn veo_write_mem(PH: VeoProcHandleRef, Addr: u64,
                          Data: *const c_void, Size: usize) -> c_int;
     pub fn veo_async_read_mem(Ctx: VeoThrContextRef, Data: *mut c_void,
-                              Addr: uint64_t, Size: usize) -> uint64_t;
-    pub fn veo_async_write_mem(Ctx: VeoThrContextRef, Addr: uint64_t,
-                               Data: *const c_void, Size: usize) -> uint64_t;
+                              Addr: u64, Size: usize) -> u64;
+    pub fn veo_async_write_mem(Ctx: VeoThrContextRef, Addr: u64,
+                               Data: *const c_void, Size: usize) -> u64;
 }
 
 
@@ -195,7 +195,7 @@ impl VEOffload {
         &mut self, sym: SymHandle, args: VeoArgsRef
     ) -> WeldResult<CallHandle> {
         let call = veo_call_async(self.ctx, sym, args);
-        let VeoRequestIdInvalid = !(0_u64) as CallHandle;
+        // let VeoRequestIdInvalid = !(0_u64) as CallHandle;
         Ok(call)
     }
 
@@ -204,12 +204,12 @@ impl VEOffload {
     ) -> WeldResult<CallHandle> {
         let c_symname = CString::new(symname.as_ref()).unwrap();
         let call = veo_call_async_by_name(self.ctx, libhdl, c_symname.as_ptr(), args);
-        let VeoRequestIdInvalid = !(0_u64) as CallHandle;
+        // let VeoRequestIdInvalid = !(0_u64) as CallHandle;
         Ok(call)
     }
 
-    pub unsafe fn call_wait_result(&mut self, call: CallHandle) -> WeldResult<uint64_t> {
-        let mut retp: uint64_t = 0;
+    pub unsafe fn call_wait_result(&mut self, call: CallHandle) -> WeldResult<u64> {
+        let mut retp: u64 = 0;
         let state = veo_call_wait_result(self.ctx, call, &mut retp);
         match state {
             VeoCommandState::VeoCommandOk => {}
@@ -219,8 +219,8 @@ impl VEOffload {
     }
 
     pub unsafe fn alloc_mem(&mut self, size: usize) -> WeldResult<u64> {
-        let mut addr: uint64_t = 0;
-        let err = veo_alloc_mem(self.proc, &mut addr as *mut uint64_t, size);
+        let mut addr: u64 = 0;
+        let err = veo_alloc_mem(self.proc, &mut addr as *mut u64, size);
         if err != 0 {
             return weld_err!("alloc memory");
         } else {
@@ -238,7 +238,7 @@ impl VEOffload {
     }
 
     pub unsafe fn read_mem(&self, src: u64, dst: *mut c_void, len: usize) -> WeldResult<()> {
-        let err = veo_read_mem(self.proc, dst, src as uint64_t, len);
+        let err = veo_read_mem(self.proc, dst, src as u64, len);
         if err != 0 {
             return weld_err!("veo read mem: failed");
         }
@@ -246,7 +246,7 @@ impl VEOffload {
     }
 
     pub unsafe fn write_mem(&self, src: *const c_void, dst: u64, len: usize) -> WeldResult<()> {
-        let err = veo_write_mem(self.proc, dst as uint64_t, src, len);
+        let err = veo_write_mem(self.proc, dst as u64, src, len);
         if err != 0 {
             return weld_err!("veo write mem: failed");
         }
@@ -285,7 +285,7 @@ unsafe impl Sync for VEOffload {}  // needed to have VEO static
 pub trait VEOffloadHelper {
     unsafe fn initialize<T: AsRef<str>>(&mut self, veorun_path: Option<T>) -> WeldResult<()>;
     unsafe fn finalize(&mut self);
-    unsafe fn call_and_wait<T: AsRef<str>>(&mut self, libhdl: VeoHandle, symname: T, args: VeoArgsRef) -> WeldResult<uint64_t>;
+    unsafe fn call_and_wait<T: AsRef<str>>(&mut self, libhdl: VeoHandle, symname: T, args: VeoArgsRef) -> WeldResult<u64>;
     fn get_libhdl(&self, filename: &str) -> Option<VeoHandle>;
     fn unwrap_ready(&self) -> WeldResult<()>;
 }
@@ -306,7 +306,7 @@ impl VEOffloadHelper for VEOffload {
 
         self.ctx = veo_context_open(self.proc);
         if self.ctx.is_null() {
-            let err = veo_proc_destroy(self.proc);
+            let _err = veo_proc_destroy(self.proc);
             return weld_err!("cannot create veo context");
         }
 
@@ -330,7 +330,7 @@ impl VEOffloadHelper for VEOffload {
 
     unsafe fn call_and_wait<T: AsRef<str>>(
         &mut self, libhdl: VeoHandle, symname: T, args: VeoArgsRef
-    ) -> WeldResult<uint64_t> {
+    ) -> WeldResult<u64> {
         let call = self.call_async_by_name(libhdl, symname, args)?;
         self.call_wait_result(call)
     }
@@ -359,7 +359,7 @@ pub trait VEOffloadArgument<V> {
 
 impl VEOffloadArgument<i64> for VEOffload {
     unsafe fn args_set(args: VeoArgsRef, argnum: isize, val: i64) {
-        let ret = veo_args_set_i64(args, argnum as c_int, val as int64_t);
+        let ret = veo_args_set_i64(args, argnum as c_int, val as i64);
         if ret < -1 {
             panic!("cannot set veo args");
         }
@@ -368,7 +368,7 @@ impl VEOffloadArgument<i64> for VEOffload {
 
 impl VEOffloadArgument<u64> for VEOffload {
     unsafe fn args_set(args: VeoArgsRef, argnum: isize, val: u64) {
-        let ret = veo_args_set_u64(args, argnum as c_int, val as uint64_t);
+        let ret = veo_args_set_u64(args, argnum as c_int, val as u64);
         if ret < -1 {
             panic!("cannot set veo args");
         }
@@ -377,7 +377,7 @@ impl VEOffloadArgument<u64> for VEOffload {
 
 impl VEOffloadArgument<i32> for VEOffload {
     unsafe fn args_set(args: VeoArgsRef, argnum: isize, val: i32) {
-        let ret = veo_args_set_i32(args, argnum as c_int, val as int32_t);
+        let ret = veo_args_set_i32(args, argnum as c_int, val as i32);
         if ret < -1 {
             panic!("cannot set veo args");
         }
@@ -386,7 +386,7 @@ impl VEOffloadArgument<i32> for VEOffload {
 
 impl VEOffloadArgument<u32> for VEOffload {
     unsafe fn args_set(args: VeoArgsRef, argnum: isize, val: u32) {
-        let ret = veo_args_set_u32(args, argnum as c_int, val as uint32_t);
+        let ret = veo_args_set_u32(args, argnum as c_int, val as u32);
         if ret < -1 {
             panic!("cannot set veo args");
         }
