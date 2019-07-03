@@ -687,6 +687,22 @@ pub trait CodeGenExt {
         )
     }
 
+    unsafe fn c_define_function<T: AsRef<str>>(
+        &mut self,
+        c_ret_ty: &str,
+        c_arg_tys: &[String],
+        name: T,
+        inline: bool,
+    ) -> CodeBuilder {
+        self.c_define_function_with_visibility(
+            c_ret_ty,
+            c_arg_tys,
+            &"static",
+            name,
+            inline,
+        )
+    }
+
     /// Generates code to define a function with the given return type and argument type.
     ///
     /// Returns a reference to the function, a builder used to build the function body, and the
@@ -737,6 +753,34 @@ pub trait CodeGenExt {
         LLVMPositionBuilderAtEnd(builder, block);
         LLVMSetLinkage(function, visibility);
         (function, builder, block, code)
+    }
+
+    unsafe fn c_define_function_with_visibility<T: AsRef<str>>(
+        &mut self,
+        c_ret_ty: &str,
+        c_arg_tys: &[String],
+        visibility: &str,
+        name: T,
+        inline: bool,
+    ) -> CodeBuilder {
+        // for C
+        let mut code = CodeBuilder::new();
+        let args_line = self.c_define_args(&c_arg_tys);
+        code.add(format!(
+            "{st} {inl} {ret_ty} {fun}({args})",
+            st=visibility,
+            inl={
+                if inline {
+                    "inline"
+                } else {
+                    ""
+                }
+            },
+            ret_ty=c_ret_ty,
+            fun=name.as_ref(),
+            args=args_line,
+        ));
+        code
     }
 
     /// Converts a `LiteralKind` into a constant LLVM scalar literal value.
@@ -1680,7 +1724,7 @@ impl CGenerator {
                 context.c_get_block(func.blocks[0].id)?,
             ));
             for statement in bb.statements.iter() {
-                self.gen_statement(context, statement)?;
+                self.gen_statement(context, statement, false)?;    // VE-Weld NO_RESIZE
             }
             self.gen_terminator(context, &bb, None)?;
         }
@@ -1697,6 +1741,7 @@ impl CGenerator {
         &mut self,
         context: &mut FunctionContext<'_>,
         statement: &Statement,
+        is_no_resize : bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<()> {
         use crate::ast::Type::*;
         use crate::sir::StatementKind::*;
@@ -2032,7 +2077,7 @@ impl CGenerator {
             Merge { .. } => {
                 // for C and LLVM
                 use self::builder::BuilderExpressionGen;
-                self.gen_merge(context, statement)
+                self.gen_merge(context, statement, is_no_resize)    // VE-Weld NO_RESIZE
             }
             Negate(_) => {
                 // for C

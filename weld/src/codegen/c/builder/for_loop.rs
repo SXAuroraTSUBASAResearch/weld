@@ -279,6 +279,14 @@ impl ForLoopGenInternal for CGenerator {
         assert_eq!(builders.len(), 1);
         let weld_ty = &builders[0];
 
+        // VE-Weld NO_RESIZE
+        // This code uses the number of blocks to detect 'if' statement.
+        // Multiple blocks do notÇmean 'if' statement in general. But single block
+        // never means 'if' statement, so we use the number of blocks here. 
+        // FIXME: This code should be modified to detect whether the entire loop
+        // calculate ont-to-one mapping or not.
+        let is_no_resize = (func.blocks.len() == 1);
+
         // Create a context for the function.
         let context = &mut FunctionContext::new(self.context, program, func);
 
@@ -320,6 +328,57 @@ impl ForLoopGenInternal for CGenerator {
             context.c_get_value(&parfor.builder)?,
         ));
         let c_idx = context.c_get_value(&parfor.idx_arg)?;
+
+        // VE-Weld NO_RESIZE begin
+        // FIXME: need to split following code into a function to avoid copy-and-paste.
+        if is_no_resize {
+            context.body.add(format!(
+                "if ( {}.capacity >= {} ) {{",
+                context.c_get_value(&parfor.builder_arg)?,
+                c_max,
+            ));
+
+            context.body.add(format!(
+                "for ({} = 0; {} != {}; ++{}) {{",
+                c_idx,
+                c_idx,
+                c_max,
+                c_idx,
+            ));
+
+            // Add the SIR function basic blocks.
+            self.gen_basic_block_defs(context)?;
+
+            // Load the loop element.
+            let c_i = &context.c_get_value(&parfor.idx_arg)?;
+            let c_e = &context.c_get_value(&parfor.data_arg)?;
+            self.gen_loop_element(context, c_i, c_e, parfor)?;
+
+            // Generate the body - this resembles the usual SIR function generation, but we pass a
+            // basic block ID to gen_terminator to change the `EndFunction` terminators to a basic
+            // block jump to the end of the loop.
+            for bb in func.blocks.iter() {
+                // for C
+                /*
+                context.body.add(format!(
+                    "{}:",
+                    context.c_get_block(bb.id)?,
+                ));
+                */
+                for statement in bb.statements.iter() {
+                    self.gen_statement(context, statement, is_no_resize)?;
+                }
+                let loop_terminator = context.c_get_value(&parfor.builder_arg)?;
+                self.gen_terminator(context, &bb, Some(loop_terminator))?;
+            }
+
+            // Loop body end
+            context.body.add("}");
+
+            context.body.add("} else {");
+        }
+        // VE-Weld NO_RESIZE end
+
         context.body.add(format!(
             "for ({} = 0; {} != {}; ++{}) {{",
             c_idx,
@@ -345,7 +404,7 @@ impl ForLoopGenInternal for CGenerator {
                 context.c_get_block(bb.id)?,
             ));
             for statement in bb.statements.iter() {
-                self.gen_statement(context, statement)?;
+                self.gen_statement(context, statement, false)?;    // VE-Weld NO_RESIZE
             }
             let loop_terminator = context.c_get_value(&parfor.builder_arg)?;
             self.gen_terminator(context, &bb, Some(loop_terminator))?;
@@ -353,6 +412,8 @@ impl ForLoopGenInternal for CGenerator {
 
         // Loop body end
         context.body.add("}");
+
+        if is_no_resize { context.body.add("}"); } // VE-Weld NO_RESIZE
 
         context.body.add(format!(
             "return {};",

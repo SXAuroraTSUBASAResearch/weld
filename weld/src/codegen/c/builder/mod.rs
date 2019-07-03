@@ -62,6 +62,7 @@ pub trait BuilderExpressionGen {
         &mut self,
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
+        is_no_resize: bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<()>;
     /// Generates code for the `Result` statement.
     unsafe fn gen_result(
@@ -351,6 +352,7 @@ impl BuilderExpressionGen for CGenerator {
         &mut self,
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
+        is_no_resize: bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<()> {
         let m = MergeStatement::extract(statement, ctx.sir_function)?;
         // let builder_pointer = ctx.get_value(m.builder)?;
@@ -362,27 +364,15 @@ impl BuilderExpressionGen for CGenerator {
                 ctx.body.add(format!(
                     "{};",
                     methods.c_gen_merge(
-                        ctx.builder,
                         &mut self.intrinsics,
                         ctx.c_get_run(),
                         &c_builder_pointer,
                         &ctx.c_get_value(m.value)?,
                         ty,
+                        is_no_resize,    // VE-Weld NO_RESIZE
                     )?,
                 ));
 
-                // for LLVM
-                /*
-                let merge_value = self.load(ctx.builder, ctx.get_value(m.value)?)?;
-                let methods = self.appenders.get_mut(m.kind).unwrap();
-                let _ = methods.gen_merge(
-                    ctx.builder,
-                    &mut self.intrinsics,
-                    ctx.get_run(),
-                    builder_pointer,
-                    merge_value,
-                )?;
-                */
                 Ok(())
             }
             DictMerger(ref key, ref val, ref binop) => {
