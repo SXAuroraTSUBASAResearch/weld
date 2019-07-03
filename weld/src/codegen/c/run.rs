@@ -208,11 +208,11 @@ impl CompiledModule {
                 // Vector(elem) is following 16 bytes data structure.
                 //  0:  intptr_t  data
                 //  8:  u64       length
-                let data = unsafe {*(addr as *const u64)};
                 let len = unsafe {*(addr as *const i64).offset(1)};
                 println!("  is Vector(elem={}, len={})", elem, len);
                 /*
                 // Dump 16 eleements.
+                let data = unsafe {*(addr as *const u64)};
                 let size = self.calc_data_size(elem)?;
                 let mut eaddr = data;
                 for i in 0..16 {
@@ -461,7 +461,7 @@ impl CompiledModule {
         match *ty {
             Scalar(_) | Simd(_) => Ok(()),
             Struct(ref fields) => {
-                let offset = unsafe { *(ptr as *mut u64) } as usize;
+                let offset = unsafe { *(ptr as *const u64) } as usize;
                 unsafe {
                     *(ptr as *mut u64) = addr_ve + offset as u64;
                 }
@@ -478,18 +478,33 @@ impl CompiledModule {
                 Ok(())
             }
             Vector(ref elem) => {
+                let offset = unsafe { *(ptr as *const u64) } as usize;
                 unsafe {
-                    let offset = *(ptr as *mut u64);
-                    *(ptr as *mut u64) = addr_ve + offset;
+                    *(ptr as *mut u64) = addr_ve + offset as u64;
                 }
-                /*
                 match **elem {
-                    Struct(ref fields) => {}
-                    Vector(ref elem) => {}
-                    Dict(_, _) => {}
+                    Scalar(_) | Simd(_) => {
+                        Ok(())
+                    }
+                    Vector(_) => {
+                        let length =
+                            unsafe { *(ptr as *const u64).offset(1) } as usize;
+                        let elem_size = self.calc_data_size(&*elem)?;
+                        for i in 0..length {
+                            self._deserialize_on_host(
+                                &*elem,
+                                buffer,
+                                addr_ve,
+                                offset + i * elem_size,
+                            )?;
+                        }
+                        Ok(())
+                    }
+                    // FIXME: doesn't support Vec[Struct[...]].
+                    _ => {
+                        weld_err!("Unsupported vector element type {}", **elem)
+                    }
                 }
-                */
-                Ok(())
             }
             Dict(_, _) => {
                 weld_err!("Unsupported dict type {}", ty)
@@ -607,6 +622,7 @@ impl CompiledModule {
                     f,
                     &mut buffer[contents_offset] as *mut u8 as u64,
                     faddr,
+                    contents_offset,
                 )?;
             } else {
             }
@@ -636,7 +652,7 @@ impl CompiledModule {
         Ok((buffer, serialized_data_size))
     }
 
-    fn _copy_contents(&self, ty: &Type, dest: u64, src: u64)
+    fn _copy_contents(&self, ty: &Type, dest: u64, src: u64, offset: usize)
         -> Result<usize, WeldError> {
         match *ty {
             // Value of Sclar and Simd will be copied by _copy_data function.
@@ -645,7 +661,7 @@ impl CompiledModule {
                 weld_err!("Unsupported struct type {}", ty)
             }
             Vector(ref elem) => {
-                self._copy_contents_of_vector(&*elem, dest, src)
+                self._copy_contents_of_vector(&*elem, dest, src, offset)
             }
             Dict(_, _) => {
                 weld_err!("Unsupported dict type {}", ty)
@@ -658,12 +674,16 @@ impl CompiledModule {
             }
         }
     }
-    fn _copy_contents_of_vector(&self, elem_ty: &Type, dest: u64, src: u64)
-        -> Result<usize, WeldError> {
+    fn _copy_contents_of_vector(
+        &self,
+        elem_ty: &Type,
+        dest: u64,              // destination (serialized) data address on host
+        src: u64,               // source data address on host
+        offset: usize,          // offset to use when serialize pointers
+    ) -> Result<usize, WeldError> {
         //      WeldVec
         //  0:  intptr_t  data
         //  8:  u64       length
-
         let elem_data = unsafe { *(src as *const u64) };
         let length = unsafe { *((src + 8) as *const u64) } as usize;
         let elem_size = self.calc_data_size(elem_ty)?;
@@ -680,7 +700,38 @@ impl CompiledModule {
                 }
                 Ok(size)
             }
-            // FIXME: doesn't support Vec[Vec[i8]] or Vec[Struct[...]].
+            Vector(ref elem) => {
+                //      WeldVec
+                //  0:  intptr_t  data  --+
+                //  8:  u64       length  |
+                //                        v
+                //                        0:  intptr_t data1
+                //                        8:  u64      length1
+                //                       16:  intptr_t data2
+                //                       24:  u64      length2
+                //                       ...
+                let mut contents_size = 0;
+                for i in 0..length as u64 {
+                    let dest_elem_ptr = dest + i * elem_size as u64;
+                    let dest_elem_len = dest + i * elem_size as u64 + 8;
+                    let src_elem_len = elem_data + i * elem_size as u64 + 8;
+                    unsafe {
+                        *(dest_elem_ptr as *mut u64) =
+                            (offset + size + contents_size) as u64;
+                        *(dest_elem_len as *mut u64) =
+                            *(src_elem_len as *const u64);
+                    }
+                    let each_size = self._copy_contents_of_vector(
+                        &*elem,
+                        dest + (size + contents_size) as u64,
+                        elem_data + i * elem_size as u64,
+                        offset + size + contents_size,
+                    )?;
+                    contents_size += each_size;
+                }
+                Ok(size + contents_size)
+            }
+            // FIXME: doesn't support Vec[Struct[...]].
             _ => {
                 weld_err!("Unsupported vector element type {}", *elem_ty)
             }
