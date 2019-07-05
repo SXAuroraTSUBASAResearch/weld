@@ -319,7 +319,7 @@ impl ForLoopGenInternal for CGenerator {
         ));
         let c_idx = context.c_get_value(&parfor.idx_arg)?;
         context.body.add(format!(
-            "for ({} = 0; {} != {}; ++{}) {{",
+            "for ({} = 0; {} < {}; ++{}) {{",
             c_idx,
             c_idx,
             c_max,
