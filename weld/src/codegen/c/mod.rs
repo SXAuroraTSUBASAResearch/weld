@@ -2080,13 +2080,8 @@ impl CGenerator {
                 self.gen_merge(context, statement, is_no_resize)    // VE-Weld NO_RESIZE
             }
             Negate(_) => {
-                // for C
-                context.body.add("#error Negate is not implemented yet");
-
-                // for LLVM
-                // use self::numeric::NumericExpressionGen;
-                // self.gen_negate(context, statement)
-                Ok(())
+                use self::numeric::NumericExpressionGen;
+                self.c_gen_negate(context, statement)
             }
             Not(_) => {
                 // for C
