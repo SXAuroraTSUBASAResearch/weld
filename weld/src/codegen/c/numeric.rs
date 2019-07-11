@@ -454,9 +454,8 @@ impl NumericExpressionGen for CGenerator {
                 _ => unreachable!(),
             };
 
-            let mut zero = match kind {
-                F32 => "0.0",
-                F64 => "0.0",
+            let zero = match kind {
+                F32 | F64 => "0.0",
                 _ => "0",
             };
 
