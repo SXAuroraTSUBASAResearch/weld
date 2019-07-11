@@ -44,6 +44,11 @@ pub trait NumericExpressionGen {
         ctx: &mut FunctionContext<'_>,
         statement: &Statement,
     ) -> WeldResult<()>;
+    unsafe fn c_gen_negate(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()>;
     /// Generates code for the not operator.
     unsafe fn gen_not(
         &mut self,
@@ -427,6 +432,50 @@ impl NumericExpressionGen for CGenerator {
             let output = ctx.get_value(statement.output.as_ref().unwrap())?;
             let _ = LLVMBuildStore(ctx.builder, result, output);
             Ok(())
+        } else {
+            unreachable!()
+        }
+    }
+
+    unsafe fn c_gen_negate(
+        &mut self,
+        ctx: &mut FunctionContext<'_>,
+        statement: &Statement,
+    ) -> WeldResult<()> {
+        use crate::ast::BinOpKind::Subtract;
+        use crate::ast::ScalarKind::{F32, F64};
+        use crate::ast::Type::{Scalar, Simd};
+        use crate::sir::StatementKind::Negate;
+        if let Negate(ref child) = statement.kind {
+            let ty = ctx.sir_function.symbol_type(child)?;
+            let (kind, simd) = match *ty {
+                Scalar(kind) => (kind, false),
+                Simd(kind) => (kind, true),
+                _ => unreachable!(),
+            };
+
+            let mut zero = match kind {
+                F32 => "0.0",
+                F64 => "0.0",
+                _ => "0",
+            };
+
+            if simd {
+                ctx.body.add("#error simd of Negate is not implemented yet");
+                Ok(())
+                /*
+                zero = LLVMConstVector(
+                    [zero; LLVM_VECTOR_WIDTH as usize].as_mut_ptr(),
+                    LLVM_VECTOR_WIDTH,
+                );
+                */
+            } else {
+                let child = ctx.c_get_value(child)?;
+                let result = c_gen_binop(Subtract, &zero, &child, ty)?;
+                let output = ctx.c_get_value(statement.output.as_ref().unwrap())?;
+                ctx.body.add(format!("{} = {};", output, result));
+                Ok(())
+            }
         } else {
             unreachable!()
         }
