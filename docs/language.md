@@ -67,7 +67,7 @@ Except from the SIMD type `simd[S]` (where `S` must be a scalar type), `T` in th
    * `K`: Key type. Can be any type.
    * `V`: Value type. Can be a scalar or a struct of scalars.
    * `binop`: [A commutative binary operation](#commutative-binary-operations-for-builders)
-* `groupbuilder[K,V]`: Groups `{K, V}` by key in a dictionary. Used to produce a `dict[K,vec[V]]`.
+* `groupmerger[K,V]`: Groups `{K, V}` by key in a dictionary. Used to produce a `dict[K,vec[V]]`.
    * `K`: Key type. Can be any type.
    * `V`: Value type. Can be any type.
 * `vecmerger[T,binop]`: Combines `{i64, T}` pairs by key into a vector using `binop`. The builder is initialized with an initial vector to work with.
@@ -130,8 +130,8 @@ refer to types.
   value until the boolean it returns is `false`, and then return the `T` field in
   its output as the final value of the expression.
 * `cudf[name,ty](args)` to call arbitrary C-style functions (see a discussion of UDFs [below](#user-defined-functions)).
-* `serialize(data)` serializes `data` into a `vec[i8]`. The data in this vector can be written to disk, sent over the network, etc.
-* `deserialize[T](data)` deserializes `data` (a `vec[i8]`) into a value of type `T`.
+* `serialize(data)` serializes `data` into a `vec[u8]`. The data in this vector can be written to disk, sent over the network, etc.
+* `deserialize[T](data)` deserializes `data` (a `vec[u8]`) into a value of type `T`.
 * Casting: `T(data)` implements a cast between scalar types if `T` is a scalar and `data` is also a scalar type.
 * `broadcast(data)` takes a scalar value `data` and broadcasts the value into a SIMD type.
 * `assert(value)` takes a boolean value and checks that it is `true`. If so, the expression itself returns `true`. Otherwise, an error is thrown and the program terminates.

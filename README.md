@@ -4,8 +4,6 @@
 
 [Documentation](https://www.weld.rs/docs/latest/weld/)
 
-**Note: due to an apparent issue with `rustc`, `cargo build --release` with the defaults was causing a segmentation fault on MacOS. Optimizations with release builds have thus been disabled until this issue is resolved.**
-
 Weld is a language and runtime for improving the performance of data-intensive applications. It optimizes across libraries and functions by expressing the core computations in libraries using a common intermediate representation, and optimizing across each framework.
 
 Modern analytics applications combine multiple functions from different libraries and frameworks to build complex workflows. Even though individual functions can achieve high performance in isolation, the performance of the combined workflow is often an order of magnitude below hardware limits due to extensive data movement across the functions. Weld’s take on solving this problem is to lazily build up a computation for the entire workflow, and then optimizing and evaluating it only when a result is needed.
@@ -29,7 +27,7 @@ To build Weld, you need [the latest stable version of Rust](http://rust-lang.org
 To install Rust, follow the steps [here](https://rustup.rs). You can verify that Rust was installed correctly on your system by typing `rustc` into your shell. If you already have Rust and  `rustup` installed, you can upgrade to the latest stable version with:
 
 ```bash
-$ rustup update stable
+rustup update stable
 ```
 
 #### MacOS LLVM Installation
@@ -37,18 +35,16 @@ $ rustup update stable
 To install LLVM on macOS, first install [Homebrew](https://brew.sh/). Then:
 
 ```bash
-$ brew install llvm@6
+brew install llvm@6
 ```
 
 Weld's dependencies require `llvm-config` on `$PATH`, so you may need to create a symbolic link so the correct `llvm-config` is picked up (note that you might need to add `sudo` at the start of this command):
 
 ```bash
-$ ln -s /usr/local/Cellar/llvm/6.0.0/bin/llvm-config /usr/local/bin/llvm-config
+ln -sf `brew --prefix llvm@6`/bin/llvm-config /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x`.
-
-Enter the `weld_rt/cpp` directory and try running `make`. If the command fails with errors related to missing header files, you may need to install XCode and/or XCode Command Line Tools. Run `xcode-select --install` to do this.
 
 #### Ubuntu LLVM Installation
 
@@ -75,7 +71,7 @@ sudo apt-get install llvm-6.0-dev clang-6.0
 Weld's dependencies require `llvm-config`, so you may need to create a symbolic link so the correct `llvm-config` is picked up. `sudo` may be required:
 
 ```bash
-$ ln -s /usr/bin/llvm-config-6.0 /usr/local/bin/llvm-config
+ln -s /usr/bin/llvm-config-6.0 /usr/local/bin/llvm-config
 ```
 
 To make sure this worked correctly, run `llvm-config --version`. You should see `6.0.x` or newer.
@@ -83,7 +79,7 @@ To make sure this worked correctly, run `llvm-config --version`. You should see 
 You will also need `zlib`:
 
 ```bash
-$ sudo apt-get install zlib1g-dev
+sudo apt-get install zlib1g-dev
 ```
 
 #### Building Weld
@@ -91,17 +87,17 @@ $ sudo apt-get install zlib1g-dev
 With LLVM and Rust installed, you can build Weld. Clone this repository, set the `WELD_HOME` environment variable, and build using `cargo`:
 
 ```bash
-$ git clone https://www.github.com/weld-project/weld
-$ cd weld/
-$ export WELD_HOME=`pwd`
-$ cargo build --release
+git clone https://www.github.com/weld-project/weld
+cd weld/
+export WELD_HOME=`pwd`
+cargo build --release
 ```
 Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on Mac): `libweld` and `libweldrt`.
 
 Finally, run the unit and integration tests:
 
 ```bash
-$ cargo test
+cargo test
 ```
 
 ## Documentation
@@ -117,7 +113,7 @@ The `docs/` directory contains documentation for the different components of Wel
 
 ## Python Bindings
 
-Weld's Python bindings are in [`python/weld`](https://github.com/weld-project/weld/tree/master/python/weld), with examples in [`examples/python`](https://github.com/weld-project/weld/tree/master/examples/python).
+Weld's Python bindings are in [`python`](https://github.com/weld-project/weld/tree/master/python), with examples in [`examples/python`](https://github.com/weld-project/weld/tree/master/examples/python).
 
 ## Grizzly
 

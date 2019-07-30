@@ -11,7 +11,7 @@ use std::ffi::CStr;
 
 use crate::ast::Type::*;
 use crate::ast::*;
-use crate::codegen::llvm::vector::VectorExt;
+use crate::codegen::llvm2::vector::VectorExt;
 use crate::error::*;
 use crate::sir::*;
 
@@ -21,8 +21,8 @@ use self::llvm_sys::prelude::*;
 use super::{CodeGenExt, FunctionContext, HasPointer, LlvmGenerator};
 
 lazy_static! {
-    /// The serialized type, which is a vec[i8].
-    static ref SER_TY: Type = Type::Vector(Box::new(Type::Scalar(ScalarKind::I8)));
+    /// The serialized type, which is a vec[u8].
+    static ref SER_TY: Type = Type::Vector(Box::new(Type::Scalar(ScalarKind::U8)));
     /// The type returned by the serialization function.
     static ref SER_RET_TY: Type = Type::Struct(vec![SER_TY.clone(), Scalar(ScalarKind::I64)]);
 }
@@ -428,7 +428,7 @@ impl SerHelper for LlvmGenerator {
                     let key_ser_fn = self.gen_serialize_fn(key)?;
                     let val_ser_fn = self.gen_serialize_fn(val)?;
                     let methods = self.dictionaries.get_mut(ty).unwrap();
-                    let buffer_vector = self.vectors.get_mut(&Scalar(ScalarKind::I8)).unwrap();
+                    let buffer_vector = self.vectors.get_mut(&Scalar(ScalarKind::U8)).unwrap();
                     methods.gen_serialize(
                         builder,
                         function,
@@ -528,8 +528,6 @@ impl DeHelper for LlvmGenerator {
         buffer: LLVMValueRef,
         position: LLVMValueRef,
     ) -> WeldResult<(LLVMValueRef, LLVMValueRef)> {
-        use crate::codegen::llvm::vector::VectorExt;
-
         let size = self.size_of(ty);
         let pointer = self.gen_at(builder, &SER_TY, buffer, position)?;
 
@@ -554,7 +552,6 @@ impl DeHelper for LlvmGenerator {
         buffer: LLVMValueRef,
         position: LLVMValueRef,
     ) -> WeldResult<LLVMValueRef> {
-        use crate::codegen::llvm::vector::VectorExt;
         let elem_size = self.size_of(LLVMGetElementType(LLVMTypeOf(ptr)));
         let size = LLVMBuildNSWMul(builder, size, elem_size, c_str!(""));
 
@@ -741,7 +738,7 @@ impl DeHelper for LlvmGenerator {
                     // NOTE: This requires re-hashing: we could look into encoding dictionaries without
                     // having to do this.
                     use self::llvm_sys::LLVMIntPredicate::LLVMIntSGT;
-                    use crate::codegen::llvm::hash::GenHash;
+                    use crate::codegen::llvm2::hash::GenHash;
 
                     let size_type = self.i64_type();
                     let (size, start_position) =

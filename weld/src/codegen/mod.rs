@@ -22,10 +22,10 @@ use crate::WeldError;
 
 use std::fmt;
 
-mod llvm;
+mod llvm2;
 mod c;
 
-pub use self::llvm::load_library;
+pub use self::llvm2::load_library;
 
 /// A wrapper for a struct passed as input to Weld.
 #[derive(Clone, Debug)]
@@ -100,7 +100,7 @@ pub fn compile_program(
         if offload_ve() {
             c::compile(&program, conf, stats)?
         } else {
-            llvm::compile(&program, conf, stats)?
+            llvm2::compile(&program, conf, stats)?
         };
     let result = CompiledModule { runnable };
     Ok(result)
@@ -108,5 +108,5 @@ pub fn compile_program(
 
 /// Get the size of a value for a given target.
 pub fn size_of(ty: &Type) -> usize {
-    llvm::size_of(ty)
+    llvm2::size_of(ty)
 }
