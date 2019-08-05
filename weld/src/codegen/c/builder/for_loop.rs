@@ -84,6 +84,7 @@ pub trait ForLoopGenInternal {
         c_i: &str,
         c_e: &str,
         parfor: &ParallelForData,
+        counter: &str,
     ) -> WeldResult<()>;
 }
 
@@ -310,6 +311,51 @@ impl ForLoopGenInternal for CGenerator {
         self.gen_allocas(context)?;
         self.gen_store_parameters(context)?;
 
+        // Debug message
+//        context.body.add(format!("\
+//            printf(\"{resize}\\n\");
+//            ",
+//            resize=if without_resize { "no_resize" } else { "resize" },
+//        ));
+
+        let nditer = check_any_nditer(parfor);
+        let loop_info = if nditer.is_some() {
+            // Debug message
+//            context.body.add(format!("// isNdIter"));
+            let first_iter = nditer.clone().unwrap();
+            // Calculate len(shape)
+            let shape = context.c_get_value(
+                first_iter.shape.as_ref().unwrap())?;
+            let shape_ty = context.sir_function.symbol_type(
+                first_iter.shape.as_ref().unwrap())?;
+            let size = self.c_gen_size(context.builder, shape_ty, &shape)?;
+            let len_ty = self.c_u64_type();
+            let len = context.var_ids.next();
+            // dynamically generates an array of len(shape) ints on the stack.
+            let counter_ty = self.c_u64_type();
+            let counter = context.var_ids.next();
+            let idx = context.var_ids.next();
+            context.body.add(format!("\
+                {len_ty} {len} = {size};
+                {counter_ty} {counter}[{len}];
+                for ({idx_ty} {idx} = 0; {idx} < {len}; ++{idx}) {{
+                    {counter}[{idx}] = 0;
+                }}",
+                len_ty=len_ty,
+                len=len,
+                size=size,
+                counter_ty=counter_ty,
+                counter=counter,
+                idx_ty=counter_ty,
+                idx=idx,
+            ));
+            // FIXME: may need to support first_iter.start here.
+            (counter, len, shape, shape_ty)
+        } else {
+            let dummy_ty = context.sir_function.symbol_type(&parfor.data[0].data)?;
+            ("".to_string(), "".to_string(), "".to_string(), dummy_ty)
+        };
+
         // Store the loop induction variable and the builder argument.
         // for C
         context.body.add(format!(
@@ -319,11 +365,9 @@ impl ForLoopGenInternal for CGenerator {
         ));
         let c_idx = context.c_get_value(&parfor.idx_arg)?;
         context.body.add(format!(
-            "for ({} = 0; {} < {}; ++{}) {{",
-            c_idx,
-            c_idx,
-            c_max,
-            c_idx,
+            "for ({idx} = 0; {idx} < {max}; ++{idx}) {{",
+            idx=c_idx,
+            max=c_max,
         ));
         // Add the SIR function basic blocks.
         self.gen_basic_block_defs(context)?;
@@ -331,7 +375,7 @@ impl ForLoopGenInternal for CGenerator {
         // Load the loop element.
         let c_i = &context.c_get_value(&parfor.idx_arg)?;
         let c_e = &context.c_get_value(&parfor.data_arg)?;
-        self.gen_loop_element(context, c_i, c_e, parfor)?;
+        self.gen_loop_element(context, c_i, c_e, parfor, &loop_info.0)?;
 
         // Generate the body - this resembles the usual SIR function generation, but we pass a
         // basic block ID to gen_terminator to change the `EndFunction` terminators to a basic
@@ -344,6 +388,33 @@ impl ForLoopGenInternal for CGenerator {
             ));
             for statement in bb.statements.iter() {
                 self.gen_statement(context, statement, without_resize)?;
+            }
+            // increase counter
+            if nditer.is_some() {
+                let idx_ty = self.c_u64_type();
+                let idx = context.var_ids.next();
+                let offset = context.var_ids.next();
+                let (counter, len, shape, shape_ty) = loop_info.clone();
+                let shape_pointer = self.c_gen_at(
+                    context.builder, shape_ty, &shape, &offset)?;
+                context.body.add(format!("\
+                    for ({idx_ty} {idx} = 0; {idx} < {len}; ++{idx}) {{
+                       {offset_ty} {offset} = {len} - {idx} - 1;
+                       {counter}[{offset}] += 1;
+                       if ({counter}[{offset}] < *{shape_pointer}) {{
+                          break;
+                       }} else {{
+                          {counter}[{offset}] = 0;
+                       }}
+                    }}",
+                    idx_ty=idx_ty,
+                    idx=idx,
+                    offset_ty=idx_ty,
+                    offset=offset,
+                    counter=counter,
+                    shape_pointer=shape_pointer,
+                    len=len,
+                ));
             }
             let loop_terminator = context.c_get_value(&parfor.builder_arg)?;
             self.gen_terminator(context, &bb, Some(loop_terminator))?;
@@ -386,7 +457,7 @@ impl ForLoopGenInternal for CGenerator {
         // never means 'if' statement, so we use the number of blocks here. 
         // FIXME: This code should be modified to detect whether the entire loop
         // calculate ont-to-one mapping or not.
-        let is_no_resize = (func.blocks.len() == 1);
+        let is_no_resize = func.blocks.len() == 1;
 
         // Create a context for the function.
         let context = &mut FunctionContext::new(self.context, program, func);
@@ -492,6 +563,7 @@ impl ForLoopGenInternal for CGenerator {
         c_i: &str,
         c_e: &str,
         parfor: &ParallelForData,
+        counter: &str,
     ) -> WeldResult<()> {
         let mut c_values = vec![];
         for iter in parfor.data.iter() {
@@ -619,7 +691,68 @@ impl ForLoopGenInternal for CGenerator {
                     values.push(i);
                     */
                 }
-                NdIter => unimplemented!(), // NdIter Load Element
+                NdIter => {                     // NdIter Load Element
+                    // The address of each iteration's element is
+                    // calculated like below.
+                    //    offset = 0;
+                    //    for (i = 0; i < vec1_size(shape); ++i)
+                    //      offset += counter[i] * strides[i];
+                    let strides = ctx.c_get_value(
+                        iter.strides.as_ref().unwrap())?;
+                    let strides_ty = ctx.sir_function.symbol_type(
+                        iter.strides.as_ref().unwrap())?;
+                    let len = self.c_gen_size(
+                        ctx.builder, strides_ty, &strides)?;
+                    let offset = ctx.var_ids.next();
+                    let idx = ctx.var_ids.next();
+                    let idx_ty = self.c_u64_type();
+                    let strides_pointer = self.c_gen_at(
+                        ctx.builder, strides_ty, &strides, &idx)?;
+                    ctx.body.add(format!("\
+                        {offset_ty} {offset} = 0;
+                        for ({idx_ty} {idx} = 0; {idx} < {len}; ++{idx}) {{
+                            {offset} += {counter}[{idx}] * *{strides_pointer};
+                        }}",
+                        offset_ty=idx_ty,
+                        offset=offset,
+                        idx=idx,
+                        idx_ty=idx_ty,
+                        len=len,
+                        counter=counter,
+                        strides_pointer=strides_pointer,
+                    ));
+                    // Debug
+//                    ctx.body.add(format!("\
+//                        printf(\"offset is %d\\n\", {offset});
+//                        ",
+//                        offset=offset,
+//                    ));
+                    // Load element
+                    //    e = vector[offset];
+                    let vector = &ctx.c_get_value(&iter.data)?;
+                    let vector_type = ctx.sir_function.symbol_type(&iter.data)?;
+                    let element_pointer = self.c_gen_at(
+                        ctx.builder, vector_type, vector, &offset)?;
+                    let element = ctx.var_ids.next();
+                    if let Type::Vector(elem_type) = vector_type {
+                        ctx.body.add(format!(
+                            "{} {} = *{};",
+                            self.c_type(elem_type)?,
+                            element,
+                            element_pointer,
+                        ));
+                    } else {
+                        unreachable!()
+                    }
+                    // Debug
+//                    ctx.body.add(format!("\
+//                        printf(\"data[%d] is %g\\n\", {offset}, {element});
+//                        ",
+//                        offset=offset,
+//                        element=element,
+//                    ));
+                    c_values.push(element);
+                }
             }
         }
 
@@ -779,7 +912,50 @@ impl ForLoopGenInternal for CGenerator {
                 */
                 Ok("not implemented".to_string())
             }
-            NdIter => unimplemented!(), // NdIter Compute Bounds Check
+            NdIter => {                 // NdIter Compute Bounds Check
+                // The number of iterations is calculated like below.
+                //    end = 1;
+                //    for (i = 0; i < vec1_size(shape); ++i)
+                //      end *= shape[i];
+                //    end -= start;
+                let start = if iter.start.is_some() {
+                    ctx.c_get_value(iter.start.as_ref().unwrap())?
+                } else {
+                    "0".to_string()
+                };
+                let shape = ctx.c_get_value(iter.shape.as_ref().unwrap())?;
+                let shape_ty =
+                    ctx.sir_function.symbol_type(iter.shape.as_ref().unwrap())?;
+                let size = self.c_gen_size(ctx.builder, shape_ty, &shape)?;
+                let end = ctx.var_ids.next();
+                let idx = ctx.var_ids.next();
+                let idx_ty = self.c_u64_type();
+                let shape_pointer = self.c_gen_at(
+                    ctx.builder, shape_ty, &shape, &idx)?;
+                ctx.body.add(format!("\
+                    {end_ty} {end} = 1;
+                    for ({idx_ty} {idx} = 0; {idx} < {size}; ++{idx}) {{
+                        {end} *= *{shape_pointer};
+                    }}
+                    {end} -= {start};",
+                    end_ty=idx_ty,
+                    end=end,
+                    idx=idx,
+                    idx_ty=idx_ty,
+                    size=size,
+                    shape_pointer=shape_pointer,
+                    start=start,
+                ));
+                // Debug
+//                ctx.body.add(format!("\
+//                    printf(\"max is %d\\n\", {end});
+//                    ",
+//                    end=end,
+//                ));
+                // FIXME: need additional checks here.
+                ctx.body.add(format!("goto {};", c_pass_block));
+                Ok(end)
+            }
         }
     }
 
@@ -812,4 +988,17 @@ impl ForLoopGenInternal for CGenerator {
         ));
         Ok(())
     }
+}
+
+/// Helper function to check if any of the iters are of kind NdIter,
+/// and returns it if found.
+fn check_any_nditer(par_for: &ParallelForData) -> Option<ParallelForIter> {
+    let mut nditer :Option<ParallelForIter> = None;
+    for cur_iter in par_for.data.iter() {
+        if cur_iter.kind == IterKind::NdIter {
+            nditer = Some(cur_iter.clone());
+            break;
+        }
+    }
+    nditer
 }
