@@ -217,13 +217,14 @@ impl Appender {
             u64=self.c_u64_type(),
             app=appender,
         ));
+        let elem_size = self.c_size_of(&self.c_elem_ty);
         c_code.add(format!(
             "{} = {};",
             format!("{}->data", appender),
             intrinsics.c_call_weld_run_realloc(
                 &run_handle,
                 &format!("{app}->data", app=appender),
-                "newCap",
+                &format!("newCap * {elem_size}", elem_size=elem_size),
             ),
         ));
         c_code.add(format!(

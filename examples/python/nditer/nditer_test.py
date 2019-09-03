@@ -9,12 +9,21 @@ def assert_correct(np_a, z):
     for s in z.shape:
         shape.append(s)
     shape = tuple(shape)
+    epsilon = 1E-8
 
     np_a = np.reshape(np_a, shape)
 
+    # Debug
+    #for i in range((z.shape[0])):
+    #    for j in range(z.shape[1]):
+    #        if np_a[i][j] != z[i][j]:
+    #            print(i)
+    #            print(j)
+    #            print(np_a[i][j])
+    #            print(z[i][j])
     for i in range((z.shape[0])):
         for j in range(z.shape[1]):
-            assert np_a[i][j] == z[i][j]
+            assert abs(np_a[i][j] - z[i][j]) < epsilon
 
 def test_view():
     '''
