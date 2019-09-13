@@ -322,8 +322,13 @@ typedef struct {{
 /// is that boolean types are "externally visible", whereas `i1`s only appear in internal code.
 unsafe fn c_bool_type(ccontext: CContextRef) -> String {
     use crate::ast::ScalarKind::*;
+    use crate::util::env::{get_veweld_conv_bool_to_int};
     if !(*ccontext).basic_types.contains_key(&Bool) {
-        (*ccontext).prelude_code.add("typedef char bool;");
+        if get_veweld_conv_bool_to_int() {
+            (*ccontext).prelude_code.add("typedef int bool;");
+        } else {
+            (*ccontext).prelude_code.add("typedef char bool;");
+        }
         (*ccontext).basic_types.insert(Bool, "bool".to_string());
     }
     (*ccontext).basic_types.get(&Bool).unwrap().to_string()

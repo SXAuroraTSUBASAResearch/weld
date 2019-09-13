@@ -38,6 +38,22 @@ pub fn get_ncc_cflags() -> String {
   }
 }
 
+pub fn get_veweld_cflags() -> String {
+  match env::var("VEWELD_CFLAGS") {
+      Ok(val) => val,
+      Err(_) => "".to_string(),
+  }
+}
+
+pub fn get_veweld_conv_bool_to_int() -> bool {
+  let mut conv_bool_to_int :bool = false;
+  let veweld_cflags = get_veweld_cflags();
+  if veweld_cflags.contains("-veweld-conv-bool-to-int") {
+    conv_bool_to_int = true;
+  }
+  conv_bool_to_int
+}
+
 pub fn get_home() -> String {
   match env::var("WELD_HOME") {
       Ok(val) => val,
