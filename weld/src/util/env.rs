@@ -46,12 +46,8 @@ pub fn get_veweld_cflags() -> String {
 }
 
 pub fn get_veweld_conv_bool_to_int() -> bool {
-  let mut conv_bool_to_int :bool = false;
   let veweld_cflags = get_veweld_cflags();
-  if veweld_cflags.contains("-veweld-conv-bool-to-int") {
-    conv_bool_to_int = true;
-  }
-  conv_bool_to_int
+  !(veweld_cflags.contains("-veweld-no-conv-bool-to-int"))
 }
 
 pub fn get_home() -> String {
