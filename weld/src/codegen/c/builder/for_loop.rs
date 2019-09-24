@@ -452,12 +452,17 @@ impl ForLoopGenInternal for CGenerator {
         let weld_ty = &builders[0];
 
         // VE-Weld NO_RESIZE
-        // This code uses the number of blocks to detect 'if' statement.
-        // Multiple blocks do notÇmean 'if' statement in general. But single block
-        // never means 'if' statement, so we use the number of blocks here. 
-        // FIXME: This code should be modified to detect whether the entire loop
-        // calculate ont-to-one mapping or not.
-        let is_no_resize = func.blocks.len() == 1;
+        use crate::ast::Type::*;
+        use crate::ast::BuilderKind::*;
+        let is_no_resize = match func.return_type {
+            Builder(ref kind, _) => {
+                match kind {
+                    Appender(_) => true,
+                    _ => false,
+                }
+            }
+            _ => false,
+        };
 
         // Create a context for the function.
         let context = &mut FunctionContext::new(self.context, program, func);
