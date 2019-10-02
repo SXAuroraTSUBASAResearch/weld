@@ -1746,7 +1746,7 @@ impl CGenerator {
         &mut self,
         context: &mut FunctionContext<'_>,
         statement: &Statement,
-        is_no_resize : bool,    // VE-Weld NO_RESIZE
+        try_no_resize : bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<()> {
         use crate::ast::Type::*;
         use crate::sir::StatementKind::*;
@@ -2082,7 +2082,7 @@ impl CGenerator {
             Merge { .. } => {
                 // for C and LLVM
                 use self::builder::BuilderExpressionGen;
-                self.gen_merge(context, statement, is_no_resize)    // VE-Weld NO_RESIZE
+                self.gen_merge(context, statement, try_no_resize)    // VE-Weld NO_RESIZE
             }
             Negate(_) => {
                 use self::numeric::NumericExpressionGen;
