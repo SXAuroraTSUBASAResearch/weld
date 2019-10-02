@@ -302,7 +302,7 @@ impl Appender {
         builder_arg: &str,
         value_arg: &str,
         ty: &Type,
-        is_no_resize: bool,    // VE-Weld NO_RESIZE
+        try_no_resize: bool,    // VE-Weld NO_RESIZE
     ) -> WeldResult<String> {
         use crate::ast::Type::Simd;
         let vectorized = if let Simd(_) = ty { true } else { false };
@@ -314,7 +314,7 @@ impl Appender {
             self.define_merge_no_resize(false)?;     // VE-Weld NO_RESIZE
         }
 
-        if !is_no_resize {  // VE-Weld NO_RESIZE
+        if !try_no_resize {  // VE-Weld NO_RESIZE
             Ok(format!(
                 "{}(&{}, {}, {})",
                 if vectorized { &self.c_vmerge } else { &self.c_merge },

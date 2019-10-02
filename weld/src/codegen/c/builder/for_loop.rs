@@ -452,9 +452,13 @@ impl ForLoopGenInternal for CGenerator {
         let weld_ty = &builders[0];
 
         // VE-Weld NO_RESIZE
+        // We call no_resize function for better vector optimization if builder's capacity
+        // is big enough to hold whole input. Builder's capacity is checked at run time,
+        // so it's safe to try it if builder has the capacity field. We check the existence
+        // of the capacity field here.
         use crate::ast::Type::*;
         use crate::ast::BuilderKind::*;
-        let is_no_resize = match func.return_type {
+        let try_no_resize = match func.return_type {
             Builder(ref kind, _) => {
                 match kind {
                     Appender(_) => true,
@@ -523,7 +527,7 @@ impl ForLoopGenInternal for CGenerator {
         let args_line = self.c_call_args(&c_arguments);
 
         // VE-Weld NO_RESIZE begin
-        if is_no_resize {
+        if try_no_resize {
             self.gen_loop_body_function_internal(
                 context.sir_program, func, parfor, true)?;
             self.gen_loop_body_function_internal(
