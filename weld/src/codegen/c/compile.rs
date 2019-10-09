@@ -23,6 +23,7 @@ use crate::conf::ParsedConf;
 use crate::error::*;
 use crate::ast::Type;
 use crate::util::stats::CompilationStats;
+use crate::util::dump::unique_filename;
 
 use self::llvm_sys::core::*;
 use self::llvm_sys::execution_engine::*;
@@ -139,7 +140,7 @@ pub unsafe fn compile(
     if home.is_empty() {
         error!("WELD_HOME is not defined");
     }
-    let shared_object = "libverun.so".to_string();
+    let shared_object = format!("libverun-{}.so", unique_filename());
 
     // Execute C compiler
     let output = Command::new("sh")
