@@ -162,6 +162,15 @@ fn simple_merge(sym: &Symbol, expr: &Expr) -> bool {
         } => {
             !cond.contains_symbol(sym) && simple_merge(sym, on_true) && simple_merge(sym, on_false)
         }
+        Ident(ref s) => {
+            use crate::util::env::{get_veweld_infer_filter_size};
+            if get_veweld_infer_filter_size() {
+                if s == sym {
+                    return true;
+                }
+            }
+            false
+        }
         _ => false,
     }
 }
