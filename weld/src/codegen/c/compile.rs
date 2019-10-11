@@ -96,7 +96,7 @@ pub fn write_code(
 ) -> WeldResult<String> {
     let path = &mut PathBuf::new();
     path.push(".");
-    path.push(&format!("code-{}-{}", time::now().to_timespec().sec, "gen"));
+    path.push(&format!("gen-{}", unique_filename()));
     path.set_extension("c");
 
     let filename = path.to_str().unwrap().to_string();
