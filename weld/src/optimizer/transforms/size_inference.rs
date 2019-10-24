@@ -160,8 +160,19 @@ fn simple_merge(sym: &Symbol, expr: &Expr) -> bool {
             ref on_true,
             ref on_false,
         } => {
-            !cond.contains_symbol(sym) && simple_merge(sym, on_true) && simple_merge(sym, on_false)
+            !cond.contains_symbol(sym) &&
+            (   (simple_merge(sym, on_true) && simple_merge(sym, on_false))  // original condition
+             || (simple_merge(sym, on_true) && simple_ident(sym, on_false))  // Check `if(condition, merge(b,x), x)`
+             || (simple_ident(sym, on_true) && simple_merge(sym, on_false))  // Check `if(condition, x, merge(b,x))`
+            )
         }
+        _ => false,
+    }
+}
+
+/// Checks that `expr` is `Ident` of `sym`
+fn simple_ident(sym: &Symbol, expr: &Expr) -> bool {
+    match expr.kind {
         Ident(ref s) => {
             use crate::util::env::{get_veweld_infer_filter_size};
             if get_veweld_infer_filter_size() {
