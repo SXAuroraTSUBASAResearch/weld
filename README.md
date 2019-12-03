@@ -1,5 +1,7 @@
 # Weld
 
+** This fork is develped to use vector engine as computing backend.**
+
 [![Build Status](https://travis-ci.org/weld-project/weld.svg?branch=master)](https://travis-ci.org/weld-project/weld)
 
 [Documentation](https://www.weld.rs/docs/latest/weld/)
@@ -82,6 +84,30 @@ You will also need `zlib`:
 sudo apt-get install zlib1g-dev
 ```
 
+#### SX-Aurora LLVM Installation
+
+To install llvm on SX-Aurora, yum install with specify rpm URL. On 2019/12/03, below one is the latest version.
+
+```bash
+LLVM_VE_VER=1.8.0
+sudo yum install \
+https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-${LLVM_VE_VER}-${LLVM_VE_VER}-1.x86_64.rpm \
+https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-link-${LLVM_VE_VER}-1.x86_64.rpm
+```
+
+Set path to directory including LLVM executables:
+```bash
+export PATH=$PATH:/opt/nec/nosupport/llvm-ve/bin
+```
+
+Make alias of clang:
+```bash
+LLVM_VER=$(llvm-config --version | cut -d . -f 1,2)
+cd /opt/nec/nosupport/llvm-ve/bin
+sudo ln -s clang++ clang++-$LLVM_VER
+sudo ln -s clang clang-$LLVM_VER
+```
+
 #### Building Weld
 
 With LLVM and Rust installed, you can build Weld. Clone this repository, set the `WELD_HOME` environment variable, and build using `cargo`:
@@ -90,6 +116,7 @@ With LLVM and Rust installed, you can build Weld. Clone this repository, set the
 git clone https://www.github.com/weld-project/weld
 cd weld/
 export WELD_HOME=`pwd`
+scl enable devtoolset-8 bash
 cargo build --release
 ```
 Weld builds two dynamically linked libraries (`.so` files on Linux and `.dylib` files on Mac): `libweld` and `libweldrt`.
