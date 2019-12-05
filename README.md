@@ -1,6 +1,6 @@
 # Weld
 
-** This fork is develped to use vector engine as computing backend.**
+**This fork is develped to use vector engine as computing backend.**
 
 [![Build Status](https://travis-ci.org/weld-project/weld.svg?branch=master)](https://travis-ci.org/weld-project/weld)
 
